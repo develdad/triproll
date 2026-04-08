@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback, useMemo, useEffect } from "react";
+import { useRef, useState, useCallback, useMemo, useEffect, Suspense } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
@@ -98,6 +98,50 @@ function DestinationPin({ pinRef }: { pinRef: React.MutableRefObject<THREE.Group
       </mesh>
     </group>
   );
+}
+
+// ---- Card position tracker (must be inside Canvas for useFrame) ----
+function CardPositionTracker({
+  pinRef,
+  cameraRef,
+  showCard,
+  onPositionUpdate,
+}: {
+  pinRef: React.MutableRefObject<THREE.Group | null>;
+  cameraRef: React.MutableRefObject<THREE.Camera | null>;
+  showCard: boolean;
+  onPositionUpdate: (pos: { x: number; y: number } | null) => void;
+}) {
+  useFrame(() => {
+    if (!showCard || !pinRef.current || !pinRef.current.visible || !cameraRef.current) return;
+
+    // Update matrices
+    if (pinRef.current.parent) {
+      pinRef.current.parent.updateMatrixWorld(true);
+    }
+
+    // Get pin tip in world space
+    const pinTip = new THREE.Vector3(0, 0.08, 0);
+    pinRef.current.localToWorld(pinTip);
+
+    // Project to NDC
+    const ndc = pinTip.clone().project(cameraRef.current);
+    if (ndc.z > 1) {
+      onPositionUpdate(null);
+      return;
+    }
+
+    const canvas = document.querySelector("canvas");
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    onPositionUpdate({
+      x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
+      y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
+    });
+  });
+
+  return null;
 }
 
 // ---- Capture camera reference ----
@@ -267,7 +311,7 @@ function Earth({
 
   return (
     <group>
-      {/* Earth mesh with NASA Blue Marble texture */}
+      {/* Earth mesh with NASA Blue Marble texture -- pin is a CHILD so it rotates with the globe */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[1, 64, 64]} />
         <meshStandardMaterial
@@ -275,6 +319,8 @@ function Earth({
           roughness={0.7}
           metalness={0.05}
         />
+        {/* Destination pin (child of mesh, rotates with globe quaternion) */}
+        <DestinationPin pinRef={pinRef} />
       </mesh>
 
       {/* Atmosphere glow */}
@@ -298,9 +344,6 @@ function Earth({
           side={THREE.BackSide}
         />
       </mesh>
-
-      {/* Destination pin (child of globe, rotates with it) */}
-      <DestinationPin pinRef={pinRef} />
     </group>
   );
 }
@@ -419,51 +462,11 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
     pinRef.current = pin;
   }, []);
 
-  const getPinScreenPos = useCallback(() => {
-    if (
-      !pinRef.current ||
-      !pinRef.current.visible ||
-      !cameraRef.current ||
-      typeof window === "undefined"
-    ) {
-      return null;
+  const handlePositionUpdate = useCallback((pos: { x: number; y: number } | null) => {
+    if (pos) {
+      setCardPosition(pos);
     }
-
-    // Update matrices after render
-    if (pinRef.current.parent) {
-      pinRef.current.parent.updateMatrixWorld(true);
-    }
-
-    // Get pin tip position in world space
-    const pinTip = new THREE.Vector3(0, 0.08, 0);
-    pinRef.current.localToWorld(pinTip);
-
-    // Project to normalized device coordinates
-    const ndc = pinTip.clone().project(cameraRef.current);
-
-    // Check if behind camera
-    if (ndc.z > 1) return null;
-
-    // Get canvas dimensions from document
-    const canvas = document.querySelector("canvas");
-    if (!canvas) return null;
-
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: rect.left + (ndc.x * 0.5 + 0.5) * rect.width,
-      y: rect.top + (-ndc.y * 0.5 + 0.5) * rect.height,
-    };
   }, []);
-
-  // Update card position to follow pin
-  useFrame(() => {
-    if (showCard && pinRef.current?.visible) {
-      const pos = getPinScreenPos();
-      if (pos) {
-        setCardPosition(pos);
-      }
-    }
-  });
 
   const handleSpin = useCallback(() => {
     if (isSpinning || isSpinningRef.current) return;
@@ -512,11 +515,12 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
       pinRef.current.scale.set(0, 0, 0);
 
       // Compute target quaternion to center pin toward camera
-      const globeParent = pinRef.current.parent as THREE.Object3D;
-      const worldDest = normal.clone().applyQuaternion((globeParent as any).quaternion);
+      // Pin is now a child of globeRef (the mesh), so use globeRef quaternion
+      const globeMesh = globeRef.current!;
+      const worldDest = normal.clone().applyQuaternion(globeMesh.quaternion);
       const cameraDir = new THREE.Vector3(0, 0, 1);
       const rotateToFace = new THREE.Quaternion().setFromUnitVectors(worldDest, cameraDir);
-      targetQuaternion.current = rotateToFace.multiply((globeParent as any).quaternion.clone());
+      targetQuaternion.current = rotateToFace.multiply(globeMesh.quaternion.clone());
       isAutoRotatingRef.current = true;
 
       // Show card after auto-rotate settles
@@ -551,24 +555,32 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
         <directionalLight position={[-4, -1, -3]} intensity={0.2} color="#88ccff" />
         <pointLight position={[-2, 1, 4]} intensity={0.1} color="#F4845F" />
 
-        <Earth
-          onPinReady={handlePinReady}
-          onSpinComplete={handleSpinComplete}
-          spinSpeed={spinSpeed}
-          spinAxis={spinAxis}
-          targetQuaternion={targetQuaternion}
-          isSpinning={isSpinningRef}
-          isAutoRotating={isAutoRotatingRef}
-          isLanded={isLandedRef}
-          destination={destination}
-          globeRef={globeRef}
-        />
+        <Suspense fallback={null}>
+          <Earth
+            onPinReady={handlePinReady}
+            onSpinComplete={handleSpinComplete}
+            spinSpeed={spinSpeed}
+            spinAxis={spinAxis}
+            targetQuaternion={targetQuaternion}
+            isSpinning={isSpinningRef}
+            isAutoRotating={isAutoRotatingRef}
+            isLanded={isLandedRef}
+            destination={destination}
+            globeRef={globeRef}
+          />
+        </Suspense>
         <Particles />
         <CanvasInteraction
           isSpinning={isSpinningRef}
           isAutoRotating={isAutoRotatingRef}
           isLanded={isLandedRef}
           globeRef={globeRef}
+        />
+        <CardPositionTracker
+          pinRef={pinRef}
+          cameraRef={cameraRef}
+          showCard={showCard}
+          onPositionUpdate={handlePositionUpdate}
         />
       </Canvas>
 

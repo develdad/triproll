@@ -6,7 +6,6 @@ import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import WaitlistForm from "@/components/WaitlistForm";
-import TripCard from "@/components/TripCard";
 import type { GlobeDestination } from "@/components/Globe";
 
 // Dynamic import for Three.js (SSR breaks WebGL)
@@ -69,16 +68,9 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Right: Globe + Trip Card */}
+          {/* Right: Globe (card is rendered internally, positioned relative to pin) */}
           <div className="relative h-[500px] sm:h-[550px] lg:h-[600px]">
             <Globe onDestinationRevealed={handleDestinationRevealed} />
-
-            {/* Trip card overlay */}
-            {revealedDest && (
-              <div className="absolute top-4 right-4 z-20">
-                <TripCard destination={revealedDest} />
-              </div>
-            )}
           </div>
         </div>
       </section>

@@ -72,27 +72,37 @@ function Particles() {
 function DestinationPin({ pinRef }: { pinRef: React.MutableRefObject<THREE.Group | null> }) {
   return (
     <group ref={pinRef} scale={[0, 0, 0]}>
-      {/* Pin head */}
-      <mesh position={[0, 0.065, 0]}>
-        <sphereGeometry args={[0.035, 16, 16]} />
+      {/* Pin head (larger sphere) */}
+      <mesh position={[0, 0.12, 0]}>
+        <sphereGeometry args={[0.05, 16, 16]} />
         <meshStandardMaterial
           color="#F4845F"
           emissive="#F4845F"
-          emissiveIntensity={0.3}
+          emissiveIntensity={0.5}
         />
       </mesh>
-      {/* Pin stick */}
-      <mesh position={[0, 0.03, 0]}>
-        <cylinderGeometry args={[0.005, 0.005, 0.06, 8]} />
+      {/* Pin stick (longer, thicker) */}
+      <mesh position={[0, 0.05, 0]}>
+        <cylinderGeometry args={[0.008, 0.008, 0.1, 8]} />
         <meshStandardMaterial color="#E17055" />
       </mesh>
-      {/* Glow ring */}
-      <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.025, 0.045, 32]} />
+      {/* Glow ring at base */}
+      <mesh position={[0, 0.003, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.03, 0.06, 32]} />
         <meshBasicMaterial
           color="#F4845F"
           transparent
-          opacity={0.4}
+          opacity={0.5}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Outer pulse ring */}
+      <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.06, 0.08, 32]} />
+        <meshBasicMaterial
+          color="#F4845F"
+          transparent
+          opacity={0.2}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -121,7 +131,7 @@ function CardPositionTracker({
     }
 
     // Get pin tip in world space
-    const pinTip = new THREE.Vector3(0, 0.08, 0);
+    const pinTip = new THREE.Vector3(0, 0.14, 0);
     pinRef.current.localToWorld(pinTip);
 
     // Project to NDC
@@ -254,6 +264,14 @@ function Earth({
     "https://unpkg.com/three-globe@2.34.2/example/img/earth-blue-marble.jpg"
   );
 
+  // Critical: set SRGB color space so the texture renders bright (not dark/linear)
+  useEffect(() => {
+    if (earthTexture) {
+      earthTexture.colorSpace = THREE.SRGBColorSpace;
+      earthTexture.needsUpdate = true;
+    }
+  }, [earthTexture]);
+
   useEffect(() => {
     if (meshRef.current) {
       globeRef.current = meshRef.current;
@@ -348,7 +366,7 @@ function Earth({
   );
 }
 
-// ---- Trip card overlay HTML component ----
+// ---- Trip card overlay HTML component with genie effect ----
 function TripCard({
   destination,
   pinScreenPos,
@@ -361,21 +379,35 @@ function TripCard({
   onDismiss: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const lastScrollY = useRef(window.scrollY);
+  // "collapsed" means the card genied into pin due to scroll, but can reappear on scroll-to-top
+  const [collapsed, setCollapsed] = useState(false);
+  // "dismissed" means user clicked outside or spun again - card gone for good until next spin
+  const dismissedByClick = useRef(false);
 
+  // Track whether card should show based on scroll position
   useEffect(() => {
+    if (typeof window === "undefined" || !isVisible) return;
+
+    dismissedByClick.current = false;
+    setCollapsed(false);
+
     const handleScroll = () => {
-      const dy = Math.abs(window.scrollY - lastScrollY.current);
-      if (dy > 5 && isVisible) {
-        onDismiss();
+      if (dismissedByClick.current) return;
+
+      // If user scrolled past top area, collapse card into pin
+      if (window.scrollY > 50) {
+        setCollapsed(true);
+      } else {
+        // User scrolled back to top, genie card back out of pin
+        setCollapsed(false);
       }
-      lastScrollY.current = window.scrollY;
     };
 
     const handleClickOutside = (e: MouseEvent) => {
-      if (isVisible && cardRef.current && !cardRef.current.contains(e.target as Node)) {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
         const spinBtn = document.getElementById("spin-btn");
         if (!spinBtn || !spinBtn.contains(e.target as Node)) {
+          dismissedByClick.current = true;
           onDismiss();
         }
       }
@@ -392,27 +424,143 @@ function TripCard({
 
   if (!destination) return null;
 
+  // Position card above and to the right of the pin (matching demo behavior)
+  const cardW = 320;
+  const cardH = 340;
+  const offsetX = -10;
+  const offsetY = 18;
+  let cardLeft = pinScreenPos ? pinScreenPos.x + offsetX : -9999;
+  let cardTop = pinScreenPos ? pinScreenPos.y - cardH - offsetY : -9999;
+
+  // Keep card within viewport
+  if (typeof window !== "undefined" && pinScreenPos) {
+    const navHeight = 60;
+    const vw = window.innerWidth;
+    if (cardLeft + cardW > vw - 12) cardLeft = vw - cardW - 12;
+    if (cardLeft < 12) cardLeft = 12;
+    if (cardTop < navHeight) cardTop = navHeight;
+  }
+
+  // Connector line endpoints: from card bottom-left stem to pin
+  const stemX = cardLeft + 24;
+  const stemY = cardTop + cardH + 8;
+
+  // Card is "showing" when visible AND not collapsed AND not permanently dismissed
+  const showing = isVisible && !collapsed;
+
   return (
     <>
+      {/* Genie animation styles */}
+      <style>{`
+        .trip-card-genie {
+          transform-origin: bottom left;
+          transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+        }
+        .trip-card-genie.showing {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+          pointer-events: auto;
+        }
+        .trip-card-genie.collapsed {
+          opacity: 0;
+          transform: scale(0) translateY(20px);
+          pointer-events: none;
+        }
+        .trip-card-genie.hidden {
+          opacity: 0;
+          transform: translateY(10px) scale(0.95);
+          pointer-events: none;
+        }
+        .trip-card-stem::before {
+          content: '';
+          position: absolute;
+          bottom: -8px;
+          left: 16px;
+          width: 16px;
+          height: 16px;
+          background: rgba(255,255,255,0.97);
+          border-right: 1px solid rgba(178,228,230,0.3);
+          border-bottom: 1px solid rgba(178,228,230,0.3);
+          transform: rotate(45deg);
+          box-shadow: 4px 4px 8px rgba(0,0,0,0.06);
+        }
+        .connector-line {
+          transition: opacity 0.35s ease-out;
+        }
+      `}</style>
+
       <div
         ref={cardRef}
-        className={`fixed bg-white rounded-lg shadow-lg p-6 min-w-64 transition-opacity duration-300 ${
-          isVisible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        className={`fixed trip-card-genie ${
+          showing ? "showing" : collapsed ? "collapsed" : "hidden"
         }`}
         style={{
-          left: pinScreenPos ? `${pinScreenPos.x}px` : "0",
-          top: pinScreenPos ? `${pinScreenPos.y}px` : "0",
+          left: `${cardLeft}px`,
+          top: `${cardTop}px`,
+          width: `${cardW}px`,
           zIndex: 50,
         }}
       >
-        <h3 className="font-bold text-lg mb-2">{destination.name}</h3>
-        <p className="text-sm text-gray-600 mb-1">{destination.theme}</p>
-        <p className="text-sm text-gray-600">{destination.days} nights</p>
+        <div className="trip-card-stem bg-white/97 backdrop-blur-sm rounded-2xl shadow-xl border border-teal-100/30 p-6 relative"
+          style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(178,228,230,0.3)" }}>
+          {/* Destination header */}
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#F4845F" }}>
+                Your Destination
+              </p>
+              <h3 className="text-2xl font-bold text-gray-900 leading-tight">
+                {destination.name}
+              </h3>
+            </div>
+            <span className="text-white text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#0D7377" }}>
+              {destination.days} nights
+            </span>
+          </div>
+
+          {/* Trip theme */}
+          <div className="rounded-lg px-4 py-3 mb-4" style={{ background: "#FFF5F0" }}>
+            <p className="text-xs text-gray-500 mb-0.5">Trip Theme</p>
+            <p className="text-base font-semibold text-gray-900">
+              {destination.theme}
+            </p>
+          </div>
+
+          {/* Package includes */}
+          <div className="space-y-2 mb-5">
+            {[
+              { icon: "\u2708\uFE0F", label: "Round-trip flights included" },
+              { icon: "\uD83C\uDFE8", label: "4-star hotel, free cancellation" },
+              { icon: "\uD83C\uDFAF", label: "Curated activities & dining" },
+              { icon: "\uD83D\uDE97", label: "Ground transportation arranged" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="text-base">{item.icon}</span>
+                <span>{item.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA buttons */}
+          <div className="flex gap-3">
+            <button className="flex-1 text-white font-semibold py-2.5 rounded-xl text-sm cursor-pointer transition-colors" style={{ background: "#0D7377" }}>
+              Book This Trip
+            </button>
+            <button className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm cursor-pointer transition-colors hover:border-teal-400">
+              Details
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-400 text-center mt-3">
+            Demo preview. Real trips coming soon.
+          </p>
+        </div>
       </div>
 
-      {/* SVG connector line from card to pin */}
-      {isVisible && pinScreenPos && (
+      {/* SVG connector line from card stem to pin */}
+      {pinScreenPos && (
         <svg
+          className="connector-line"
           style={{
             position: "fixed",
             top: 0,
@@ -421,13 +569,14 @@ function TripCard({
             height: "100%",
             pointerEvents: "none",
             zIndex: 40,
+            opacity: showing ? 1 : 0,
           }}
         >
           <line
-            x1={pinScreenPos.x}
-            y1={pinScreenPos.y}
+            x1={stemX}
+            y1={stemY}
             x2={pinScreenPos.x}
-            y2={pinScreenPos.y - 80}
+            y2={pinScreenPos.y}
             stroke="#F4845F"
             strokeWidth={2}
             strokeDasharray="5,5"

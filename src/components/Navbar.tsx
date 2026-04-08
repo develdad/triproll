@@ -12,7 +12,7 @@ export default function Navbar() {
         {/* Logo */}
         <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
           <img
-            src="/logo-teal.svg"
+            src="/logo-mini.png"
             alt="TripRoll"
             className="h-9 sm:h-10 w-auto"
           />

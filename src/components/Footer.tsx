@@ -12,9 +12,9 @@ export default function Footer() {
           <div className="md:col-span-1">
             <Link href="/" className="flex items-center mb-3 hover:opacity-80 transition-opacity">
               <img
-                src="/logo-white.svg"
+                src="/logo-mini.png"
                 alt="TripRoll"
-                className="h-8 w-auto"
+                className="h-8 w-auto brightness-0 invert"
               />
             </Link>
             <p className="text-silver/70 text-xs">Spin the globe. Get a trip.</p>

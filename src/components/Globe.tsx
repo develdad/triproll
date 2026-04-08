@@ -334,8 +334,8 @@ function Earth({
         <sphereGeometry args={[1, 64, 64]} />
         <meshStandardMaterial
           map={earthTexture}
-          roughness={0.7}
-          metalness={0.05}
+          roughness={0.55}
+          metalness={0.02}
         />
         {/* Destination pin (child of mesh, rotates with globe quaternion) */}
         <DestinationPin pinRef={pinRef} />
@@ -379,210 +379,179 @@ function TripCard({
   onDismiss: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  // "collapsed" means the card genied into pin due to scroll, but can reappear on scroll-to-top
+  // "collapsed" means the card genied into pin due to scroll, can reappear on scroll-to-top
   const [collapsed, setCollapsed] = useState(false);
-  // "dismissed" means user clicked outside or spun again - card gone for good until next spin
-  const dismissedByClick = useRef(false);
+  // track the genie animation progress (0 = fully in pin, 1 = fully expanded)
+  const [genieProgress, setGenieProgress] = useState(0);
+  const animFrameRef = useRef<number>(0);
 
-  // Track whether card should show based on scroll position
+  // Animate genie progress smoothly
+  const targetProgress = useRef(0);
   useEffect(() => {
-    if (typeof window === "undefined" || !isVisible) return;
+    const animate = () => {
+      setGenieProgress((prev) => {
+        const diff = targetProgress.current - prev;
+        if (Math.abs(diff) < 0.005) return targetProgress.current;
+        // Ease out cubic for smooth genie feel
+        return prev + diff * 0.12;
+      });
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
 
-    dismissedByClick.current = false;
+  // Determine target: show or collapse based on visibility and scroll
+  useEffect(() => {
+    if (!isVisible) {
+      targetProgress.current = 0;
+      return;
+    }
+
+    // Card just became visible: expand it
+    targetProgress.current = 1;
     setCollapsed(false);
 
     const handleScroll = () => {
-      if (dismissedByClick.current) return;
-
-      // If user scrolled past top area, collapse card into pin
-      if (window.scrollY > 50) {
+      if (window.scrollY > 5) {
+        targetProgress.current = 0;
         setCollapsed(true);
       } else {
-        // User scrolled back to top, genie card back out of pin
+        targetProgress.current = 1;
         setCollapsed(false);
       }
     };
 
-    const handleClickOutside = (e: MouseEvent) => {
-      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
-        const spinBtn = document.getElementById("spin-btn");
-        if (!spinBtn || !spinBtn.contains(e.target as Node)) {
-          dismissedByClick.current = true;
-          onDismiss();
-        }
-      }
-    };
-
     window.addEventListener("scroll", handleScroll, { passive: true });
-    document.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isVisible]);
 
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      document.removeEventListener("click", handleClickOutside);
-    };
-  }, [isVisible, onDismiss]);
+  if (!destination || !pinScreenPos) return null;
 
-  if (!destination) return null;
-
-  // Position card above and to the right of the pin (matching demo behavior)
+  // Card dimensions
   const cardW = 320;
-  const cardH = 340;
-  const offsetX = -10;
-  const offsetY = 18;
-  let cardLeft = pinScreenPos ? pinScreenPos.x + offsetX : -9999;
-  let cardTop = pinScreenPos ? pinScreenPos.y - cardH - offsetY : -9999;
+  // Position: bottom-left corner of card sits at the pin head position
+  // Card goes above and to the right of the pin
+  let cardLeft = pinScreenPos.x;
+  let cardTop = pinScreenPos.y - 380; // card height + small gap
 
   // Keep card within viewport
-  if (typeof window !== "undefined" && pinScreenPos) {
-    const navHeight = 60;
+  if (typeof window !== "undefined") {
+    const navHeight = 64;
     const vw = window.innerWidth;
     if (cardLeft + cardW > vw - 12) cardLeft = vw - cardW - 12;
     if (cardLeft < 12) cardLeft = 12;
     if (cardTop < navHeight) cardTop = navHeight;
   }
 
-  // Connector line endpoints: from card bottom-left stem to pin
-  const stemX = cardLeft + 24;
-  const stemY = cardTop + cardH + 8;
+  // Genie effect: scale from 0 at bottom-left corner, with slight vertical squash
+  const p = genieProgress;
+  const scale = p;
+  const opacity = Math.min(p * 2, 1); // fade in faster than scale
+  const skewX = (1 - p) * -4; // slight skew that resolves as card expands
+  const scaleY = 0.6 + p * 0.4; // vertical stretch: starts squished, ends normal
 
-  // Card is "showing" when visible AND not collapsed AND not permanently dismissed
-  const showing = isVisible && !collapsed;
+  const isShowing = p > 0.01;
 
   return (
     <>
-      {/* Genie animation styles */}
       <style>{`
-        .trip-card-genie {
-          transform-origin: bottom left;
-          transition: opacity 0.35s ease-out, transform 0.35s ease-out;
-        }
-        .trip-card-genie.showing {
-          opacity: 1;
-          transform: translateY(0) scale(1);
-          pointer-events: auto;
-        }
-        .trip-card-genie.collapsed {
-          opacity: 0;
-          transform: scale(0) translateY(20px);
-          pointer-events: none;
-        }
-        .trip-card-genie.hidden {
-          opacity: 0;
-          transform: translateY(10px) scale(0.95);
-          pointer-events: none;
-        }
-        .trip-card-stem::before {
-          content: '';
-          position: absolute;
-          bottom: -8px;
-          left: 16px;
-          width: 16px;
-          height: 16px;
-          background: rgba(255,255,255,0.97);
-          border-right: 1px solid rgba(178,228,230,0.3);
-          border-bottom: 1px solid rgba(178,228,230,0.3);
-          transform: rotate(45deg);
-          box-shadow: 4px 4px 8px rgba(0,0,0,0.06);
-        }
-        .connector-line {
-          transition: opacity 0.35s ease-out;
+        @keyframes genie-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(244, 132, 95, 0.3); }
+          50% { box-shadow: 0 0 12px 4px rgba(244, 132, 95, 0.15); }
         }
       `}</style>
 
-      <div
-        ref={cardRef}
-        className={`fixed trip-card-genie ${
-          showing ? "showing" : collapsed ? "collapsed" : "hidden"
-        }`}
-        style={{
-          left: `${cardLeft}px`,
-          top: `${cardTop}px`,
-          width: `${cardW}px`,
-          zIndex: 50,
-        }}
-      >
-        <div className="trip-card-stem bg-white/97 backdrop-blur-sm rounded-2xl shadow-xl border border-teal-100/30 p-6 relative"
-          style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(178,228,230,0.3)" }}>
-          {/* Destination header */}
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#F4845F" }}>
-                Your Destination
-              </p>
-              <h3 className="text-2xl font-bold text-gray-900 leading-tight">
-                {destination.name}
-              </h3>
-            </div>
-            <span className="text-white text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#0D7377" }}>
-              {destination.days} nights
-            </span>
-          </div>
-
-          {/* Trip theme */}
-          <div className="rounded-lg px-4 py-3 mb-4" style={{ background: "#FFF5F0" }}>
-            <p className="text-xs text-gray-500 mb-0.5">Trip Theme</p>
-            <p className="text-base font-semibold text-gray-900">
-              {destination.theme}
-            </p>
-          </div>
-
-          {/* Package includes */}
-          <div className="space-y-2 mb-5">
-            {[
-              { icon: "\u2708\uFE0F", label: "Round-trip flights included" },
-              { icon: "\uD83C\uDFE8", label: "4-star hotel, free cancellation" },
-              { icon: "\uD83C\uDFAF", label: "Curated activities & dining" },
-              { icon: "\uD83D\uDE97", label: "Ground transportation arranged" },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="text-base">{item.icon}</span>
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* CTA buttons */}
-          <div className="flex gap-3">
-            <button className="flex-1 text-white font-semibold py-2.5 rounded-xl text-sm cursor-pointer transition-colors" style={{ background: "#0D7377" }}>
-              Book This Trip
-            </button>
-            <button className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm cursor-pointer transition-colors hover:border-teal-400">
-              Details
-            </button>
-          </div>
-
-          <p className="text-xs text-gray-400 text-center mt-3">
-            Demo preview. Real trips coming soon.
-          </p>
-        </div>
-      </div>
-
-      {/* SVG connector line from card stem to pin */}
-      {pinScreenPos && (
-        <svg
-          className="connector-line"
+      {isShowing && (
+        <div
+          ref={cardRef}
           style={{
             position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: "none",
-            zIndex: 40,
-            opacity: showing ? 1 : 0,
+            left: `${cardLeft}px`,
+            top: `${cardTop}px`,
+            width: `${cardW}px`,
+            zIndex: 50,
+            transformOrigin: "bottom left",
+            transform: `scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
+            opacity,
+            pointerEvents: p > 0.8 ? "auto" : "none",
+            willChange: "transform, opacity",
           }}
         >
-          <line
-            x1={stemX}
-            y1={stemY}
-            x2={pinScreenPos.x}
-            y2={pinScreenPos.y}
-            stroke="#F4845F"
-            strokeWidth={2}
-            strokeDasharray="5,5"
-            opacity={0.6}
-          />
-        </svg>
+          <div
+            className="bg-white/97 backdrop-blur-sm rounded-2xl border border-teal-100/30 p-6 relative"
+            style={{
+              boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
+            }}
+          >
+            {/* Small triangle pointer at bottom-left pointing down toward pin */}
+            <div
+              style={{
+                position: "absolute",
+                bottom: -8,
+                left: 8,
+                width: 0,
+                height: 0,
+                borderLeft: "8px solid transparent",
+                borderRight: "8px solid transparent",
+                borderTop: "8px solid rgba(255,255,255,0.97)",
+                filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
+              }}
+            />
+
+            {/* Destination header */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#F4845F" }}>
+                  Your Destination
+                </p>
+                <h3 className="text-2xl font-bold text-gray-900 leading-tight">
+                  {destination.name}
+                </h3>
+              </div>
+              <span className="text-white text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#0D7377" }}>
+                {destination.days} nights
+              </span>
+            </div>
+
+            {/* Trip theme */}
+            <div className="rounded-lg px-4 py-3 mb-4" style={{ background: "#FFF5F0" }}>
+              <p className="text-xs text-gray-500 mb-0.5">Trip Theme</p>
+              <p className="text-base font-semibold text-gray-900">
+                {destination.theme}
+              </p>
+            </div>
+
+            {/* Package includes */}
+            <div className="space-y-2 mb-5">
+              {[
+                { icon: "\u2708\uFE0F", label: "Round-trip flights included" },
+                { icon: "\uD83C\uDFE8", label: "4-star hotel, free cancellation" },
+                { icon: "\uD83C\uDFAF", label: "Curated activities & dining" },
+                { icon: "\uD83D\uDE97", label: "Ground transportation arranged" },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="text-base">{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* CTA buttons */}
+            <div className="flex gap-3">
+              <button className="flex-1 text-white font-semibold py-2.5 rounded-xl text-sm cursor-pointer transition-colors" style={{ background: "#0D7377" }}>
+                Book This Trip
+              </button>
+              <button className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm cursor-pointer transition-colors hover:border-teal-400">
+                Details
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400 text-center mt-3">
+              Demo preview. Real trips coming soon.
+            </p>
+          </div>
+        </div>
       )}
     </>
   );
@@ -699,10 +668,11 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
         style={{ background: "transparent" }}
       >
         <CameraCapture cameraRef={cameraRef} />
-        <ambientLight intensity={0.35} />
-        <directionalLight position={[5, 2, 4]} intensity={1.2} color="#ffffff" />
-        <directionalLight position={[-4, -1, -3]} intensity={0.2} color="#88ccff" />
-        <pointLight position={[-2, 1, 4]} intensity={0.1} color="#F4845F" />
+        <ambientLight intensity={0.9} />
+        <directionalLight position={[5, 2, 4]} intensity={1.8} color="#ffffff" />
+        <directionalLight position={[-4, -1, -3]} intensity={0.6} color="#aaddff" />
+        <pointLight position={[-2, 1, 4]} intensity={0.3} color="#F4845F" />
+        <directionalLight position={[0, 0, 5]} intensity={0.5} color="#ffffff" />
 
         <Suspense fallback={null}>
           <Earth

@@ -10,22 +10,12 @@ export default function Navbar() {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-silver/20">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <div className="w-8 h-8 rounded-full bg-teal-deep flex items-center justify-center">
-            <svg
-              className="w-5 h-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <circle cx="12" cy="12" r="10" strokeWidth="1.5" />
-              <path
-                d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-                strokeWidth="1.5"
-              />
-            </svg>
-          </div>
-          <span className="text-xl font-display text-charcoal hidden sm:inline">TripRoll</span>
+        <Link href="/" className="flex items-center hover:opacity-80 transition-opacity">
+          <img
+            src="/logo-teal.svg"
+            alt="TripRoll"
+            className="h-9 sm:h-10 w-auto"
+          />
         </Link>
 
         {/* Desktop Navigation */}

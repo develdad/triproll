@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 240" width="800" height="240">
+  <defs>
+    <clipPath id="gc"><circle cx="110" cy="120" r="88"/></clipPath>
+    <mask id="ring-front">
+      <rect width="800" height="240" fill="white"/>
+      <circle cx="110" cy="120" r="85" fill="black"/>
+    </mask>
+    <mask id="ring-back">
+      <circle cx="110" cy="120" r="91" fill="white"/>
+    </mask>
+  </defs>
+
+  <!-- Globe circle -->
+  <circle cx="110" cy="120" r="88" fill="#0D9B9F"/>
+
+  <!-- Continent silhouettes (dark cutouts) -->
+  <g clip-path="url(#gc)" fill="#1A3A3D" opacity="0.55">
+    <!-- North America -->
+    <path d="M60 52 C64 46, 72 42, 82 40 C90 38, 96 40, 102 46 C106 50, 110 48, 115 44 C118 42, 122 44, 120 50 C117 56, 120 62, 116 70 C110 80, 104 86, 98 92 C92 96, 86 98, 80 92 C74 86, 68 78, 64 70 C60 62, 58 56, 60 52Z"/>
+    <!-- Central America -->
+    <path d="M84 96 C88 92, 92 94, 96 100 C100 106, 98 112, 94 118 C90 122, 88 126, 90 130Z"/>
+    <!-- South America -->
+    <path d="M96 136 C104 130, 112 128, 118 134 C124 140, 126 152, 124 164 C122 174, 126 182, 122 192 C118 200, 112 206, 104 210 C96 214, 88 212, 86 206 C84 200, 82 190, 84 180 C86 170, 90 160, 88 150 C86 142, 90 138, 96 136Z"/>
+    <!-- Greenland -->
+    <path d="M78 36 C82 34, 90 34, 96 36 C100 38, 98 42, 94 42 C88 42, 82 40, 78 36Z"/>
+    <!-- Africa -->
+    <path d="M150 60 C154 56, 162 54, 166 60 C170 66, 172 76, 170 86 C168 94, 166 100, 170 108 C174 116, 176 126, 172 138 C168 148, 162 156, 154 162 C146 166, 140 164, 142 156 C144 148, 148 138, 146 128 C144 118, 146 108, 148 98 C150 88, 152 76, 150 68 C149 62, 148 62, 150 60Z"/>
+    <!-- Europe -->
+    <path d="M148 46 C152 42, 160 40, 164 46 C168 52, 166 58, 162 62 C158 64, 152 60, 148 46Z"/>
+  </g>
+
+  <!-- Orbital ring: back (behind globe) -->
+  <ellipse cx="110" cy="128" rx="108" ry="30" fill="none" stroke="#0D9B9F" stroke-width="11" transform="rotate(-30, 110, 120)" mask="url(#ring-back)" opacity="0.35"/>
+  <!-- Orbital ring: front (in front of globe) -->
+  <ellipse cx="110" cy="128" rx="108" ry="30" fill="none" stroke="#0D9B9F" stroke-width="11" transform="rotate(-30, 110, 120)" mask="url(#ring-front)"/>
+
+  <!-- Location pin (orange/amber accent) -->
+  <g transform="translate(164, 30)">
+    <path d="M0 24 Q-4 16, -10 8 Q-13 3, -10 -2 Q-7 -7, -2 -9 Q0 -10, 2 -9 Q7 -7, 10 -2 Q13 3, 10 8 Q4 16, 0 24Z" fill="#F5A623"/>
+    <circle cx="0" cy="0" r="4.5" fill="#0D9B9F"/>
+  </g>
+
+  <!-- Wordmark "TripRoll" -->
+  <text x="228" y="148" font-family="'Nunito', 'Quicksand', 'Inter', -apple-system, sans-serif" font-size="82" fill="#0D9B9F" letter-spacing="-1">
+    <tspan font-weight="800">Trip</tspan><tspan font-weight="600">Roll</tspan>
+  </text>
+</svg>

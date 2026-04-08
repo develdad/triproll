@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+:root {
+  /* Brand - Primary */
+  --teal-deep: #0D7377;
+  --teal-bright: #14A3A8;
+  --teal-light: #B2E4E6;
+
+  /* Brand - Accent */
+  --peach: #F4845F;
+  --peach-light: #F7B89C;
+  --peach-pale: #FDE8DF;
+
+  /* Brand - Neutral */
+  --charcoal: #2D3436;
+  --slate: #636E72;
+  --silver: #B2BEC3;
+  --cloud: #F5F6FA;
+
+  /* Brand - Supporting */
+  --ocean: #0A5C5E;
+  --coral: #E17055;
+  --mint: #55EFC4;
+  --sand: #FFEAA7;
+
+  --background: var(--cloud);
+  --foreground: var(--charcoal);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-teal-deep: var(--teal-deep);
+  --color-teal-bright: var(--teal-bright);
+  --color-teal-light: var(--teal-light);
+  --color-peach: var(--peach);
+  --color-peach-light: var(--peach-light);
+  --color-peach-pale: var(--peach-pale);
+  --color-charcoal: var(--charcoal);
+  --color-slate: var(--slate);
+  --color-silver: var(--silver);
+  --color-cloud: var(--cloud);
+  --color-ocean: var(--ocean);
+  --color-coral: var(--coral);
+  --color-mint: var(--mint);
+  --color-sand: var(--sand);
+
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-dm-serif);
+  --font-mono: var(--font-jetbrains);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Globe canvas should not interfere with pointer events on overlaid UI */
+.globe-canvas {
+  touch-action: none;
+}
+
+/* Animated gradient background for hero */
+@keyframes gradient-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+/* Subtle float animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Fade in up */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s ease-out forwards;
+}
+
+.animation-delay-200 { animation-delay: 0.2s; }
+.animation-delay-400 { animation-delay: 0.4s; }
+.animation-delay-600 { animation-delay: 0.6s; }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useMemo, useEffect, Suspense } from "react";
+import { createPortal } from "react-dom";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
@@ -948,20 +949,23 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
         </Canvas>
       </div>
 
-      {/* Trip card: desktop pin-anchored vs mobile full-screen, both genie from pin */}
-      {isMobile ? (
-        <MobileTripCard
-          destination={destination.current}
-          pinScreenPos={cardPosition}
-          isVisible={showCard}
-          onDismiss={handleDismissCard}
-        />
-      ) : (
-        <DesktopTripCard
-          destination={destination.current}
-          pinScreenPos={cardPosition}
-          isVisible={showCard}
-        />
+      {/* Trip card: portal to body so it escapes any parent stacking context */}
+      {typeof document !== "undefined" && createPortal(
+        isMobile ? (
+          <MobileTripCard
+            destination={destination.current}
+            pinScreenPos={cardPosition}
+            isVisible={showCard}
+            onDismiss={handleDismissCard}
+          />
+        ) : (
+          <DesktopTripCard
+            destination={destination.current}
+            pinScreenPos={cardPosition}
+            isVisible={showCard}
+          />
+        ),
+        document.body
       )}
 
       {/* Spin button overlay - sits at bottom of the container */}

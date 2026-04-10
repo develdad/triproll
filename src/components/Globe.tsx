@@ -656,9 +656,12 @@ function MobileTripCard({
   const p = genieProgress;
   const isShowing = p > 0.01;
 
-  // Navbar is ~64px. Card sits from 72px top to bottom with 12px margins
-  const topOffset = 72;
-  const margin = 12;
+  // Navbar is ~64px. Inset card ~20% from edges for breathing room
+  const vw = typeof window !== "undefined" ? window.innerWidth : 375;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 700;
+  const hMargin = Math.round(vw * 0.1);         // 10% each side = 20% total reduction
+  const topOffset = 72 + Math.round((vh - 72) * 0.1);  // 10% below navbar
+  const bottomMargin = Math.round(vh * 0.1);
 
   // Genie effect: scale from center, vertical squash, slight vertical skew
   const scale = p;
@@ -686,9 +689,9 @@ function MobileTripCard({
           style={{
             position: "fixed",
             top: `${topOffset}px`,
-            left: `${margin}px`,
-            right: `${margin}px`,
-            bottom: `${margin}px`,
+            left: `${hMargin}px`,
+            right: `${hMargin}px`,
+            bottom: `${bottomMargin}px`,
             zIndex: 50,
             transformOrigin: "center center",
             transform: `scale(${scale}) scaleY(${scaleY})`,

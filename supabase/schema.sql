@@ -164,8 +164,12 @@ create policy "Users can view own trips"
   on public.trips for select
   using (auth.uid() = user_id);
 
--- Only admins/service role can insert/update trips (curation is manual)
--- For now, we allow user updates so the app can update status on booking
+-- Users can insert trips (via generateTrip server action, user_id must match)
+create policy "Users can insert own trips"
+  on public.trips for insert
+  with check (auth.uid() = user_id);
+
+-- Users can update their own trips (e.g. booking status changes)
 create policy "Users can update own trips"
   on public.trips for update
   using (auth.uid() = user_id);

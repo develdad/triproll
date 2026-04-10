@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUDGET_RANGES, COMMON_DEPARTING_CITIES, CONSTRAINTS_OPTIONS } from "@/lib/constants";
 import type { TripRequest } from "@/lib/types";
-import { saveTripRequest } from "@/app/actions";
+import { saveTripRequest, getActiveTravelDNA, generateTrip } from "@/app/actions";
 
 export default function TripQuestionnaire() {
   const router = useRouter();
@@ -76,47 +76,57 @@ export default function TripQuestionnaire() {
     });
   };
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const handleSubmit = async () => {
     setSubmitted(true);
+    setSubmitError(null);
 
-    // Get Travel DNA ID from session storage if available
-    let travelDnaId: string | undefined;
     try {
-      const dna = sessionStorage.getItem("travelDNA");
-      if (dna) {
-        const parsed = JSON.parse(dna);
-        travelDnaId = parsed.id;
+      // Fetch the user's active Travel DNA from Supabase
+      const dna = await getActiveTravelDNA();
+      const travelDnaId = dna?.id;
+
+      // Save the trip request
+      const result = await saveTripRequest({
+        travelDnaId,
+        departureDate: formData.departureDate,
+        returnDate: formData.returnDate,
+        budgetMin: formData.budgetMin,
+        budgetMax: formData.budgetMax,
+        partySize: formData.partySize,
+        partyType: formData.partyType,
+        departureCity: formData.departureCity,
+        constraintsDietary: formData.constraints.dietary,
+        constraintsMobility: formData.constraints.mobility,
+        constraintsPassport: formData.constraints.passport,
+        constraintsOther: formData.constraints.other,
+        mode: "commitment",
+      });
+
+      if (result.error) {
+        setSubmitError(result.error);
+        setSubmitted(false);
+        return;
       }
-    } catch { /* ignore */ }
 
-    // Persist to database via server action
-    const result = await saveTripRequest({
-      travelDnaId,
-      departureDate: formData.departureDate,
-      returnDate: formData.returnDate,
-      budgetMin: formData.budgetMin,
-      budgetMax: formData.budgetMax,
-      partySize: formData.partySize,
-      partyType: formData.partyType,
-      departureCity: formData.departureCity,
-      constraintsDietary: formData.constraints.dietary,
-      constraintsMobility: formData.constraints.mobility,
-      constraintsPassport: formData.constraints.passport,
-      constraintsOther: formData.constraints.other,
-      mode: "commitment",
-    });
+      // Generate a trip based on the request + DNA
+      const tripResult = await generateTrip(result.data!.id);
 
-    // Also store in session storage as fallback
-    sessionStorage.setItem("tripRequest", JSON.stringify({
-      ...formData,
-      id: result.data?.id,
-      status: "submitted",
-    }));
+      if (tripResult.error || !tripResult.data) {
+        // Trip generation failed, but request was saved. Go to dashboard.
+        setTimeout(() => router.push("/dashboard"), 2500);
+        return;
+      }
 
-    // Navigate to confirmation
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 2500);
+      // Navigate to the trip detail page
+      setTimeout(() => {
+        router.push(`/trip/${tripResult.data!.id}`);
+      }, 2500);
+    } catch {
+      setSubmitError("Something went wrong. Please try again.");
+      setSubmitted(false);
+    }
   };
 
   const progress = ((step + 1) / steps.length) * 100;

@@ -394,60 +394,164 @@ function CardBody({
   destination: NonNullable<GlobeDestination>;
   isMobile: boolean;
 }) {
-  const imgH = isMobile ? 160 : 140;
+  if (isMobile) {
+    // ── MOBILE: taller image, roomier spacing (scrollable modal) ──
+    return (
+      <>
+        <div style={{ position: "relative", width: "100%", height: 160, overflow: "hidden" }}>
+          <img
+            src={destination.image}
+            alt={destination.name}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
+            background: "linear-gradient(transparent, rgba(0,0,0,0.5))",
+          }} />
+          <span style={{
+            position: "absolute", top: 10, right: 10,
+            background: "#0D7377", color: "white",
+            fontSize: 12, fontWeight: 600,
+            padding: "3px 10px", borderRadius: 20,
+          }}>
+            {destination.days} nights
+          </span>
+          <div style={{ position: "absolute", bottom: 10, left: 14, right: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
+              Your Destination
+            </p>
+            <h3 style={{ fontSize: 22, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
+              {destination.name}
+            </h3>
+          </div>
+        </div>
 
+        <div style={{ padding: "16px 16px 20px" }}>
+          <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: "#FFF5F0" }}>
+            <p style={{ fontSize: 11, color: "#999", marginBottom: 2 }}>Trip Theme</p>
+            <p style={{ fontSize: 15, fontWeight: 600, color: "#2D3436" }}>
+              {destination.theme}
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#F0FAFA" }}>
+              <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Climate</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
+              <p style={{ fontSize: 11, color: "#666" }}>{destination.tempRange}</p>
+            </div>
+            <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#FFF8F5" }}>
+              <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
+              <p style={{ fontSize: 11, color: "#666" }}>Flights + hotel + activities</p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+            {[
+              { icon: "\u2708\uFE0F", label: "Flights" },
+              { icon: "\uD83C\uDFE8", label: "Hotel" },
+              { icon: "\uD83C\uDFAF", label: "Activities" },
+              { icon: "\uD83D\uDE97", label: "Transport" },
+            ].map((item) => (
+              <span
+                key={item.label}
+                style={{
+                  fontSize: 12, color: "#666", background: "#f5f5f3",
+                  padding: "3px 8px", borderRadius: 6, display: "inline-flex",
+                  alignItems: "center", gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{item.icon}</span>
+                {item.label}
+              </span>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={{
+              flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
+              padding: "12px 0", borderRadius: 12,
+              fontSize: 15, border: "none", cursor: "pointer",
+            }}>
+              Book This Trip
+            </button>
+            <button style={{
+              padding: "12px 18px",
+              border: "1px solid #e0e0e0", color: "#666",
+              borderRadius: 12, fontSize: 15,
+              background: "white", cursor: "pointer",
+            }}>
+              Details
+            </button>
+          </div>
+
+          <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", marginTop: 8 }}>
+            Demo preview. Real trips coming soon.
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  // ── DESKTOP: compact single-view layout, no internal scroll ──
   return (
     <>
-      <div style={{ position: "relative", width: "100%", height: imgH, overflow: "hidden" }}>
+      {/* Hero image: short to save vertical space */}
+      <div style={{ position: "relative", width: "100%", height: 100, overflow: "hidden" }}>
         <img
           src={destination.image}
           alt={destination.name}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
         <div style={{
-          position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
-          background: "linear-gradient(transparent, rgba(0,0,0,0.5))",
+          position: "absolute", bottom: 0, left: 0, right: 0, height: 50,
+          background: "linear-gradient(transparent, rgba(0,0,0,0.55))",
         }} />
         <span style={{
-          position: "absolute", top: 10, right: 10,
+          position: "absolute", top: 8, right: 8,
           background: "#0D7377", color: "white",
-          fontSize: isMobile ? 12 : 11, fontWeight: 600,
-          padding: "3px 10px", borderRadius: 20,
+          fontSize: 10, fontWeight: 600,
+          padding: "2px 8px", borderRadius: 20,
         }}>
           {destination.days} nights
         </span>
-        <div style={{ position: "absolute", bottom: 10, left: 14, right: 14 }}>
-          <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
+        <div style={{ position: "absolute", bottom: 8, left: 12, right: 12 }}>
+          <p style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 1 }}>
             Your Destination
           </p>
-          <h3 style={{ fontSize: isMobile ? 22 : 20, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: "white", lineHeight: 1.15, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
             {destination.name}
           </h3>
         </div>
       </div>
 
-      <div style={{ padding: isMobile ? "16px 16px 20px" : "14px 16px 16px" }}>
-        <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: "#FFF5F0" }}>
-          <p style={{ fontSize: 11, color: "#999", marginBottom: 2 }}>Trip Theme</p>
-          <p style={{ fontSize: isMobile ? 15 : 14, fontWeight: 600, color: "#2D3436" }}>
+      {/* Content area: tight padding, smaller text */}
+      <div style={{ padding: "10px 12px 12px" }}>
+        {/* Theme */}
+        <div className="rounded-md" style={{ background: "#FFF5F0", padding: "6px 10px", marginBottom: 8 }}>
+          <p style={{ fontSize: 9, color: "#999", marginBottom: 1 }}>Trip Theme</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#2D3436", lineHeight: 1.3 }}>
             {destination.theme}
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: isMobile ? 14 : 12 }}>
-          <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#F0FAFA" }}>
-            <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Climate</p>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
-            <p style={{ fontSize: 11, color: "#666" }}>{destination.tempRange}</p>
+        {/* Climate + Cost side by side */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <div className="rounded-md" style={{ flex: 1, background: "#F0FAFA", padding: "5px 8px" }}>
+            <p style={{ fontSize: 9, color: "#999", marginBottom: 1 }}>Climate</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
+            <p style={{ fontSize: 10, color: "#666" }}>{destination.tempRange}</p>
           </div>
-          <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#FFF8F5" }}>
-            <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
-            <p style={{ fontSize: 11, color: "#666" }}>Flights + hotel + activities</p>
+          <div className="rounded-md" style={{ flex: 1, background: "#FFF8F5", padding: "5px 8px" }}>
+            <p style={{ fontSize: 9, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
+            <p style={{ fontSize: 10, color: "#666" }}>Flights + hotel + activities</p>
           </div>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: isMobile ? 16 : 14 }}>
+        {/* Included items: single row */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
           {[
             { icon: "\u2708\uFE0F", label: "Flights" },
             { icon: "\uD83C\uDFE8", label: "Hotel" },
@@ -457,36 +561,37 @@ function CardBody({
             <span
               key={item.label}
               style={{
-                fontSize: isMobile ? 12 : 11, color: "#666", background: "#f5f5f3",
-                padding: "3px 8px", borderRadius: 6, display: "inline-flex",
-                alignItems: "center", gap: 4,
+                fontSize: 10, color: "#666", background: "#f5f5f3",
+                padding: "2px 6px", borderRadius: 5, display: "inline-flex",
+                alignItems: "center", gap: 3,
               }}
             >
-              <span style={{ fontSize: isMobile ? 14 : 13 }}>{item.icon}</span>
+              <span style={{ fontSize: 11 }}>{item.icon}</span>
               {item.label}
             </span>
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Buttons */}
+        <div style={{ display: "flex", gap: 6 }}>
           <button style={{
             flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
-            padding: isMobile ? "12px 0" : "10px 0", borderRadius: 12,
-            fontSize: isMobile ? 15 : 13, border: "none", cursor: "pointer",
+            padding: "8px 0", borderRadius: 10,
+            fontSize: 12, border: "none", cursor: "pointer",
           }}>
             Book This Trip
           </button>
           <button style={{
-            padding: isMobile ? "12px 18px" : "10px 16px",
+            padding: "8px 14px",
             border: "1px solid #e0e0e0", color: "#666",
-            borderRadius: 12, fontSize: isMobile ? 15 : 13,
+            borderRadius: 10, fontSize: 12,
             background: "white", cursor: "pointer",
           }}>
             Details
           </button>
         </div>
 
-        <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", marginTop: 8 }}>
+        <p style={{ fontSize: 10, color: "#bbb", textAlign: "center", marginTop: 6 }}>
           Demo preview. Real trips coming soon.
         </p>
       </div>
@@ -614,35 +719,25 @@ function DesktopTripCard({
       style={{
         position: "fixed",
         left: `${finalLeft}px`,
-        // Place the element so its bottom edge is at anchorBottom.
-        // We don't know exact rendered height, so we use "bottom" positioning
-        // via top: auto + bottom. But fixed positioning with "bottom" is
-        // relative to viewport. anchorBottom is distance from viewport top,
-        // so bottom = viewportHeight - anchorBottom.
+        // Bottom edge of card sits at anchorBottom (just above pin)
         bottom: `${(typeof window !== "undefined" ? window.innerHeight : 800) - anchorBottom}px`,
         width: `${cardW}px`,
-        maxHeight: `${anchorBottom - navH - 8}px`,
         zIndex: 60,
-        // Anchor point: bottom-left corner of the card
         transformOrigin: "0% 100%",
         transform: `scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
         opacity,
         pointerEvents: rawP > 0.8 ? "auto" : "none",
         willChange: "transform, opacity",
-        display: "flex",
-        flexDirection: "column",
       }}
     >
       <div
-        className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden flex-1 flex flex-col"
+        className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden"
         style={{
           background: "rgba(255,255,255,0.97)",
           boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
         }}
       >
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          <CardBody destination={destination} isMobile={false} />
-        </div>
+        <CardBody destination={destination} isMobile={false} />
       </div>
     </div>
   ) : null;

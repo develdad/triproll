@@ -35,9 +35,9 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-br from-ocean via-teal-deep to-charcoal" />
 
         {/* Content grid */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 items-center">
           {/* Left: Copy */}
-          <div className="flex flex-col gap-6 text-center lg:text-left py-12 lg:py-0">
+          <div className="flex flex-col gap-6 text-center lg:text-left py-4 sm:py-8 lg:py-0">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display text-white leading-tight">
               Spin the Globe.
               <br />

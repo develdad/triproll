@@ -656,7 +656,8 @@ function MobileTripCard({
 
   const rawP = genieProgress;
   const p = easeOutCubic(rawP);
-  const isShowing = rawP > 0.01;
+  // Keep rendering as long as isVisible OR animation hasn't fully settled
+  const isShowing = isVisible || rawP > 0.01;
 
   // Final card rect (20% smaller than full screen, below navbar)
   const vw = typeof window !== "undefined" ? window.innerWidth : 375;

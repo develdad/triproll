@@ -499,8 +499,9 @@ function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
-// ---- DESKTOP: Trip card with genie from pin head (bottom-left origin) ----
-// Card travels from pin position to its final resting spot.
+// ---- DESKTOP: Trip card with genie from pin head ----
+// Card rests in upper-right quadrant of globe, never overlapping the header.
+// Genie effect collapses/expands responsively on scroll.
 function DesktopTripCard({
   destination,
   pinScreenPos,
@@ -522,8 +523,9 @@ function DesktopTripCard({
     const animate = () => {
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
-        if (Math.abs(diff) < 0.003) return targetProgress.current;
-        return prev + diff * 0.1;
+        if (Math.abs(diff) < 0.005) return targetProgress.current;
+        // Fast, snappy lerp: 30% per frame for tactile feel
+        return prev + diff * 0.3;
       });
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -542,13 +544,13 @@ function DesktopTripCard({
     expandAnchor.current = window.scrollY;
     scrollDir.current = "down";
 
-    const scrollRange = 250;
+    // Short scroll range = very responsive to small gestures
+    const scrollRange = 120;
 
     const handleScroll = () => {
       const sy = window.scrollY;
       const newDir = sy > lastScrollY.current ? "down" : "up";
 
-      // When direction changes, set new anchor at current position
       if (newDir !== scrollDir.current) {
         if (newDir === "down") {
           collapseAnchor.current = sy;
@@ -559,11 +561,9 @@ function DesktopTripCard({
       }
 
       if (newDir === "down") {
-        // Scrolling down: collapse from current anchor
         const dist = sy - collapseAnchor.current;
         targetProgress.current = Math.max(0, 1 - dist / scrollRange);
       } else {
-        // Scrolling up: expand from current anchor
         const dist = expandAnchor.current - sy;
         targetProgress.current = Math.min(1, dist / scrollRange);
       }
@@ -578,38 +578,43 @@ function DesktopTripCard({
   if (!destination || !pinScreenPos) return null;
 
   const cardW = 340;
+  const navH = 72; // Header height
+  const cardPad = 8; // Minimum gap between card top and header bottom
 
-  // Final resting position for the card (bottom-left at pin, then clamped)
+  // Position: upper-right quadrant, clamped so top never overlaps header
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
   let finalLeft = pinScreenPos.x;
-  if (typeof window !== "undefined") {
-    const vw = window.innerWidth;
-    if (finalLeft + cardW > vw - 12) finalLeft = vw - cardW - 12;
-    if (finalLeft < 12) finalLeft = 12;
-  }
-  // Card sits above the pin (translateY(-100%) equivalent)
-  // We'll compute the card's bottom-left anchor point at the pin
-  // and the card position naturally offsets upward via translateY(-100%)
+  if (finalLeft + cardW > vw - 12) finalLeft = vw - cardW - 12;
+  if (finalLeft < 12) finalLeft = 12;
 
-  // Apply eased progress
+  // Card top: start below the header with padding, never above it
+  const minTop = navH + cardPad;
+  let finalTop = pinScreenPos.y - 420; // Approximate card height offset
+  if (finalTop < minTop) finalTop = minTop;
+
+  // Genie: interpolate position from pin to final resting spot
   const p = easeOutCubic(genieProgress);
   const rawP = genieProgress;
 
+  const currentLeft = pinScreenPos.x + (finalLeft - pinScreenPos.x) * p;
+  const currentTop = pinScreenPos.y + (finalTop - pinScreenPos.y) * p;
+
   const scale = p;
-  const opacity = Math.min(p * 1.8, 1);
-  const skewX = (1 - p) * -6;
-  const scaleY = 0.5 + p * 0.5;
+  const opacity = Math.min(p * 2.0, 1);
+  const skewX = (1 - p) * -4;
+  const scaleY = 0.6 + p * 0.4;
   const isShowing = rawP > 0.01;
 
   return isShowing ? (
     <div
       style={{
         position: "fixed",
-        left: `${finalLeft}px`,
-        top: `${pinScreenPos.y}px`,
+        left: `${currentLeft}px`,
+        top: `${currentTop}px`,
         width: `${cardW}px`,
         zIndex: 60,
         transformOrigin: "bottom left",
-        transform: `translateY(-100%) scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
+        transform: `scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
         opacity,
         pointerEvents: rawP > 0.8 ? "auto" : "none",
         willChange: "transform, opacity",
@@ -623,16 +628,6 @@ function DesktopTripCard({
         }}
       >
         <CardBody destination={destination} isMobile={false} />
-        <div
-          style={{
-            position: "absolute", bottom: -8, left: 8,
-            width: 0, height: 0,
-            borderLeft: "8px solid transparent",
-            borderRight: "8px solid transparent",
-            borderTop: "8px solid rgba(255,255,255,0.97)",
-            filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
-          }}
-        />
       </div>
     </div>
   ) : null;
@@ -665,7 +660,7 @@ function MobileTripCard({
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
         if (Math.abs(diff) < 0.003) return targetProgress.current;
-        return prev + diff * 0.1;
+        return prev + diff * 0.3;
       });
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -684,7 +679,7 @@ function MobileTripCard({
     expandAnchor.current = window.scrollY;
     scrollDir.current = "down";
 
-    const scrollRange = 250;
+    const scrollRange = 120;
 
     const handleScroll = () => {
       const sy = window.scrollY;
@@ -721,13 +716,15 @@ function MobileTripCard({
   // Keep rendering as long as isVisible OR animation hasn't fully settled
   const isShowing = isVisible || rawP > 0.01;
 
-  // Final card rect (20% smaller than full screen, below navbar)
+  // Final card rect (below navbar, with margins)
   const vw = typeof window !== "undefined" ? window.innerWidth : 375;
   const vh = typeof window !== "undefined" ? window.innerHeight : 700;
-  const hMargin = Math.round(vw * 0.1);
+  const hMargin = Math.round(vw * 0.05);
   const navH = 72;
-  const topMargin = navH + Math.round((vh - navH) * 0.1);
-  const bottomMargin = Math.round(vh * 0.1);
+  const cardPad = 8;
+  const minTop = navH + cardPad;
+  const topMargin = minTop + Math.round((vh - navH) * 0.03);
+  const bottomMargin = Math.round(vh * 0.05);
 
   const finalW = vw - hMargin * 2;
   const finalH = vh - topMargin - bottomMargin;
@@ -747,9 +744,10 @@ function MobileTripCard({
   const scaleY = 0.6 + p * 0.4;
   const opacity = Math.min(rawP * 2.5, 1);
 
-  // Position the card so its center is at the interpolated point
+  // Position the card so its center is at the interpolated point, clamped below header
   const left = currentCenterX - (finalW / 2);
-  const top = currentCenterY - (finalH / 2);
+  const rawTop = currentCenterY - (finalH / 2);
+  const top = Math.max(minTop, rawTop);
 
   return (
     <>

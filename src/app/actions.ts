@@ -218,6 +218,8 @@ export async function generateTrip(tripRequestId: string) {
     "Europe": 12,
     "Africa": 18,
     "South America": 12,
+    "Central America": 6,
+    "Caribbean": 5,
     "Middle East": 18,
     "Domestic": 4,
   };

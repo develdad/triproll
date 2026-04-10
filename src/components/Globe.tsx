@@ -500,8 +500,9 @@ function easeOutCubic(t: number): number {
 }
 
 // ---- DESKTOP: Trip card with genie from pin head ----
-// Card rests in upper-right quadrant of globe, never overlapping the header.
-// Genie effect collapses/expands responsively on scroll.
+// The card's bottom-left corner is anchored just above the map pin.
+// It expands upward and to the right like a genie emerging from the pin,
+// and collapses back into the pin the same way.
 function DesktopTripCard({
   destination,
   pinScreenPos,
@@ -524,7 +525,6 @@ function DesktopTripCard({
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
         if (Math.abs(diff) < 0.005) return targetProgress.current;
-        // Fast, snappy lerp: 30% per frame for tactile feel
         return prev + diff * 0.3;
       });
       animFrameRef.current = requestAnimationFrame(animate);
@@ -544,7 +544,6 @@ function DesktopTripCard({
     expandAnchor.current = window.scrollY;
     scrollDir.current = "down";
 
-    // Short scroll range = very responsive to small gestures
     const scrollRange = 120;
 
     const handleScroll = () => {
@@ -578,37 +577,36 @@ function DesktopTripCard({
   if (!destination || !pinScreenPos) return null;
 
   const cardW = 340;
-  const cardH = 420; // Approximate rendered card height
   const navH = 72;
-  const cardPad = 8;
+  const pinBuffer = 10; // Gap between card bottom-left and pin center
 
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
 
-  // Final resting position for the card (fully expanded)
-  let finalLeft = pinScreenPos.x;
-  if (finalLeft + cardW > vw - 12) finalLeft = vw - cardW - 12;
-  if (finalLeft < 12) finalLeft = 12;
-  const minTop = navH + cardPad;
-  let finalTop = pinScreenPos.y - cardH;
-  if (finalTop < minTop) finalTop = minTop;
+  // The card's bottom-left corner sits just above the pin head.
+  // "left" = pin x (nudged right slightly so corner doesn't sit on pin center)
+  // "bottom edge" = pinY - pinBuffer, so "top" = pinY - pinBuffer - cardRenderedHeight
+  // But since we use transformOrigin: bottom left and let the card grow upward,
+  // we position the element so its bottom-left corner is at the pin anchor point.
+  //
+  // CSS approach: position the card with its LEFT at the pin x + buffer,
+  // and its BOTTOM at the pin y - buffer. We use "bottom" via calculated top.
 
-  // Pin position (where the card collapses to)
-  const pinX = pinScreenPos.x;
-  const pinY = pinScreenPos.y;
+  const anchorLeft = pinScreenPos.x + pinBuffer;
+  // Clamp so card doesn't overflow right edge
+  const clampedLeft = Math.min(anchorLeft, vw - cardW - 12);
+  const finalLeft = Math.max(12, clampedLeft);
+
+  // The anchor bottom is just above the pin
+  const anchorBottom = pinScreenPos.y - pinBuffer;
 
   const p = easeOutCubic(genieProgress);
   const rawP = genieProgress;
 
-  // The card scales from 0 (at pin) to 1 (full size).
-  // We position the card so the pin-relative anchor stays at the pin location.
-  // transformOrigin is set to the pin's offset within the card bounds.
-  const originX = pinX - finalLeft;
-  const originY = pinY - finalTop;
-
   const scale = Math.max(p, 0.001);
-  const opacity = Math.min(p * 2.5, 1);
-  const skewX = (1 - p) * -4;
-  const scaleY = 0.7 + p * 0.3;
+  const opacity = Math.min(rawP * 3, 1);
+  // Genie distortion: slight horizontal squeeze and vertical stretch when small
+  const scaleY = 0.65 + p * 0.35;
+  const skewX = (1 - p) * -3;
   const isShowing = rawP > 0.01;
 
   return isShowing ? (
@@ -616,24 +614,35 @@ function DesktopTripCard({
       style={{
         position: "fixed",
         left: `${finalLeft}px`,
-        top: `${finalTop}px`,
+        // Place the element so its bottom edge is at anchorBottom.
+        // We don't know exact rendered height, so we use "bottom" positioning
+        // via top: auto + bottom. But fixed positioning with "bottom" is
+        // relative to viewport. anchorBottom is distance from viewport top,
+        // so bottom = viewportHeight - anchorBottom.
+        bottom: `${(typeof window !== "undefined" ? window.innerHeight : 800) - anchorBottom}px`,
         width: `${cardW}px`,
+        maxHeight: `${anchorBottom - navH - 8}px`,
         zIndex: 60,
-        transformOrigin: `${originX}px ${originY}px`,
+        // Anchor point: bottom-left corner of the card
+        transformOrigin: "0% 100%",
         transform: `scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
         opacity,
         pointerEvents: rawP > 0.8 ? "auto" : "none",
         willChange: "transform, opacity",
+        display: "flex",
+        flexDirection: "column",
       }}
     >
       <div
-        className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden"
+        className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden flex-1 flex flex-col"
         style={{
           background: "rgba(255,255,255,0.97)",
           boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
         }}
       >
-        <CardBody destination={destination} isMobile={false} />
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <CardBody destination={destination} isMobile={false} />
+        </div>
       </div>
     </div>
   ) : null;

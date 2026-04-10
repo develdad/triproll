@@ -7,56 +7,16 @@ import * as THREE from "three";
 
 // Sample destinations for demo
 const DEMO_DESTINATIONS = [
-  {
-    name: "Barcelona, Spain", lat: 41.39, lng: 2.17, theme: "Cultural Immersion", days: 4,
-    image: "https://images.unsplash.com/photo-1583422409516-2895a77efded?w=600&h=300&fit=crop",
-    climate: "Warm Mediterranean", tempRange: "18-28°C", costRange: "$1,800 - $2,400",
-  },
-  {
-    name: "Kyoto, Japan", lat: 35.01, lng: 135.77, theme: "Ancient Wonders", days: 5,
-    image: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&h=300&fit=crop",
-    climate: "Mild & Seasonal", tempRange: "10-26°C", costRange: "$2,200 - $3,100",
-  },
-  {
-    name: "Santorini, Greece", lat: 36.39, lng: 25.46, theme: "Island Escape", days: 4,
-    image: "https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=600&h=300&fit=crop",
-    climate: "Sunny & Dry", tempRange: "20-30°C", costRange: "$2,000 - $2,800",
-  },
-  {
-    name: "Banff, Canada", lat: 51.18, lng: -115.57, theme: "Mountain Adventure", days: 3,
-    image: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=600&h=300&fit=crop",
-    climate: "Cool Alpine", tempRange: "-5-20°C", costRange: "$1,500 - $2,200",
-  },
-  {
-    name: "Marrakech, Morocco", lat: 31.63, lng: -8.0, theme: "Exotic Discovery", days: 5,
-    image: "https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600&h=300&fit=crop",
-    climate: "Hot & Arid", tempRange: "22-38°C", costRange: "$1,400 - $2,000",
-  },
-  {
-    name: "Queenstown, NZ", lat: -45.03, lng: 168.66, theme: "Thrill Seeker", days: 4,
-    image: "https://images.unsplash.com/photo-1589871973318-9ca1258faa5d?w=600&h=300&fit=crop",
-    climate: "Cool & Crisp", tempRange: "5-22°C", costRange: "$2,400 - $3,200",
-  },
-  {
-    name: "Reykjavik, Iceland", lat: 64.15, lng: -21.94, theme: "Northern Lights", days: 3,
-    image: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=600&h=300&fit=crop",
-    climate: "Cold & Dramatic", tempRange: "-2-14°C", costRange: "$2,100 - $2,900",
-  },
-  {
-    name: "Amalfi Coast, Italy", lat: 40.63, lng: 14.60, theme: "Coastal Romance", days: 5,
-    image: "https://images.unsplash.com/photo-1455587734955-081b22074882?w=600&h=300&fit=crop",
-    climate: "Warm Mediterranean", tempRange: "16-30°C", costRange: "$2,500 - $3,500",
-  },
-  {
-    name: "Sedona, Arizona", lat: 34.87, lng: -111.76, theme: "Desert Wellness", days: 3,
-    image: "https://images.unsplash.com/photo-1518098268026-4e89f1a2cd8e?w=600&h=300&fit=crop",
-    climate: "Warm & Dry", tempRange: "15-35°C", costRange: "$1,200 - $1,800",
-  },
-  {
-    name: "Tulum, Mexico", lat: 20.21, lng: -87.43, theme: "Beach Bliss", days: 4,
-    image: "https://images.unsplash.com/photo-1682553064541-0add5c1e44f0?w=600&h=300&fit=crop",
-    climate: "Tropical & Humid", tempRange: "24-33°C", costRange: "$1,600 - $2,300",
-  },
+  { name: "Barcelona, Spain", lat: 41.39, lng: 2.17, theme: "Cultural Immersion", days: 4 },
+  { name: "Kyoto, Japan", lat: 35.01, lng: 135.77, theme: "Ancient Wonders", days: 5 },
+  { name: "Santorini, Greece", lat: 36.39, lng: 25.46, theme: "Island Escape", days: 4 },
+  { name: "Banff, Canada", lat: 51.18, lng: -115.57, theme: "Mountain Adventure", days: 3 },
+  { name: "Marrakech, Morocco", lat: 31.63, lng: -8.0, theme: "Exotic Discovery", days: 5 },
+  { name: "Queenstown, NZ", lat: -45.03, lng: 168.66, theme: "Thrill Seeker", days: 4 },
+  { name: "Reykjavik, Iceland", lat: 64.15, lng: -21.94, theme: "Northern Lights", days: 3 },
+  { name: "Amalfi Coast, Italy", lat: 40.63, lng: 14.60, theme: "Coastal Romance", days: 5 },
+  { name: "Sedona, Arizona", lat: 34.87, lng: -111.76, theme: "Desert Wellness", days: 3 },
+  { name: "Tulum, Mexico", lat: 20.21, lng: -87.43, theme: "Beach Bliss", days: 4 },
 ];
 
 export type GlobeDestination = (typeof DEMO_DESTINATIONS)[number] | null;
@@ -170,12 +130,12 @@ function CardPositionTracker({
       pinRef.current.parent.updateMatrixWorld(true);
     }
 
-    // Get pin head center in world space (pin head sphere is at y=0.12)
-    const pinHead = new THREE.Vector3(0, 0.12, 0);
-    pinRef.current.localToWorld(pinHead);
+    // Get pin tip in world space
+    const pinTip = new THREE.Vector3(0, 0.14, 0);
+    pinRef.current.localToWorld(pinTip);
 
     // Project to NDC
-    const ndc = pinHead.clone().project(cameraRef.current);
+    const ndc = pinTip.clone().project(cameraRef.current);
     if (ndc.z > 1) {
       onPositionUpdate(null);
       return;
@@ -469,16 +429,19 @@ function TripCard({
   if (!destination || !pinScreenPos) return null;
 
   // Card dimensions
-  const cardW = 340;
-  // Position: bottom-left corner of card anchored exactly at pin head
+  const cardW = 320;
+  // Position: bottom-left corner of card sits at the pin head position
+  // Card goes above and to the right of the pin
   let cardLeft = pinScreenPos.x;
-  let cardTop = pinScreenPos.y;
+  let cardTop = pinScreenPos.y - 380; // card height + small gap
 
-  // Keep card within viewport (clamp right edge and left edge)
+  // Keep card within viewport
   if (typeof window !== "undefined") {
+    const navHeight = 64;
     const vw = window.innerWidth;
     if (cardLeft + cardW > vw - 12) cardLeft = vw - cardW - 12;
     if (cardLeft < 12) cardLeft = 12;
+    if (cardTop < navHeight) cardTop = navHeight;
   }
 
   // Genie effect: scale from 0 at bottom-left corner, with slight vertical squash
@@ -509,125 +472,18 @@ function TripCard({
             width: `${cardW}px`,
             zIndex: 50,
             transformOrigin: "bottom left",
-            // translateY(-100%) shifts card up by its own height so bottom-left = pin head
-            transform: `translateY(-100%) scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
+            transform: `scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
             opacity,
             pointerEvents: p > 0.8 ? "auto" : "none",
             willChange: "transform, opacity",
           }}
         >
           <div
-            className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden"
+            className="bg-white/97 backdrop-blur-sm rounded-2xl border border-teal-100/30 p-6 relative"
             style={{
-              background: "rgba(255,255,255,0.97)",
               boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
             }}
           >
-            {/* Destination image */}
-            <div style={{ position: "relative", width: "100%", height: 140, overflow: "hidden" }}>
-              <img
-                src={destination.image}
-                alt={destination.name}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-              />
-              {/* Gradient overlay for text readability */}
-              <div style={{
-                position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
-                background: "linear-gradient(transparent, rgba(0,0,0,0.5))",
-              }} />
-              {/* Nights badge on image */}
-              <span style={{
-                position: "absolute", top: 10, right: 10,
-                background: "#0D7377", color: "white",
-                fontSize: 11, fontWeight: 600,
-                padding: "3px 10px", borderRadius: 20,
-              }}>
-                {destination.days} nights
-              </span>
-              {/* Destination name on image */}
-              <div style={{ position: "absolute", bottom: 10, left: 14, right: 14 }}>
-                <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
-                  Your Destination
-                </p>
-                <h3 style={{ fontSize: 20, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
-                  {destination.name}
-                </h3>
-              </div>
-            </div>
-
-            {/* Card body */}
-            <div style={{ padding: "14px 16px 16px" }}>
-              {/* Trip theme */}
-              <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: "#FFF5F0" }}>
-                <p style={{ fontSize: 11, color: "#999", marginBottom: 2 }}>Trip Theme</p>
-                <p style={{ fontSize: 14, fontWeight: 600, color: "#2D3436" }}>
-                  {destination.theme}
-                </p>
-              </div>
-
-              {/* Climate and cost row */}
-              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#F0FAFA" }}>
-                  <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Climate</p>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
-                  <p style={{ fontSize: 11, color: "#666" }}>{destination.tempRange}</p>
-                </div>
-                <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#FFF8F5" }}>
-                  <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
-                  <p style={{ fontSize: 12, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
-                  <p style={{ fontSize: 11, color: "#666" }}>Flights + hotel + activities</p>
-                </div>
-              </div>
-
-              {/* Package includes (compact) */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
-                {[
-                  { icon: "\u2708\uFE0F", label: "Flights" },
-                  { icon: "\uD83C\uDFE8", label: "Hotel" },
-                  { icon: "\uD83C\uDFAF", label: "Activities" },
-                  { icon: "\uD83D\uDE97", label: "Transport" },
-                ].map((item) => (
-                  <span
-                    key={item.label}
-                    style={{
-                      fontSize: 11, color: "#666", background: "#f5f5f3",
-                      padding: "3px 8px", borderRadius: 6, display: "inline-flex",
-                      alignItems: "center", gap: 4,
-                    }}
-                  >
-                    <span style={{ fontSize: 13 }}>{item.icon}</span>
-                    {item.label}
-                  </span>
-                ))}
-              </div>
-
-              {/* CTA buttons */}
-              <div style={{ display: "flex", gap: 8 }}>
-                <button style={{
-                  flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
-                  padding: "10px 0", borderRadius: 12, fontSize: 13, border: "none",
-                  cursor: "pointer",
-                }}>
-                  Book This Trip
-                </button>
-                <button style={{
-                  padding: "10px 16px", border: "1px solid #e0e0e0", color: "#666",
-                  borderRadius: 12, fontSize: 13, background: "white", cursor: "pointer",
-                }}>
-                  Details
-                </button>
-              </div>
-
-              <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", marginTop: 8 }}>
-                Demo preview. Real trips coming soon.
-              </p>
-            </div>
-
             {/* Small triangle pointer at bottom-left pointing down toward pin */}
             <div
               style={{
@@ -642,6 +498,58 @@ function TripCard({
                 filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
               }}
             />
+
+            {/* Destination header */}
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#F4845F" }}>
+                  Your Destination
+                </p>
+                <h3 className="text-2xl font-bold text-gray-900 leading-tight">
+                  {destination.name}
+                </h3>
+              </div>
+              <span className="text-white text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#0D7377" }}>
+                {destination.days} nights
+              </span>
+            </div>
+
+            {/* Trip theme */}
+            <div className="rounded-lg px-4 py-3 mb-4" style={{ background: "#FFF5F0" }}>
+              <p className="text-xs text-gray-500 mb-0.5">Trip Theme</p>
+              <p className="text-base font-semibold text-gray-900">
+                {destination.theme}
+              </p>
+            </div>
+
+            {/* Package includes */}
+            <div className="space-y-2 mb-5">
+              {[
+                { icon: "\u2708\uFE0F", label: "Round-trip flights included" },
+                { icon: "\uD83C\uDFE8", label: "4-star hotel, free cancellation" },
+                { icon: "\uD83C\uDFAF", label: "Curated activities & dining" },
+                { icon: "\uD83D\uDE97", label: "Ground transportation arranged" },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="text-base">{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* CTA buttons */}
+            <div className="flex gap-3">
+              <button className="flex-1 text-white font-semibold py-2.5 rounded-xl text-sm cursor-pointer transition-colors" style={{ background: "#0D7377" }}>
+                Book This Trip
+              </button>
+              <button className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm cursor-pointer transition-colors hover:border-teal-400">
+                Details
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400 text-center mt-3">
+              Demo preview. Real trips coming soon.
+            </p>
           </div>
         </div>
       )}

@@ -88,6 +88,7 @@ export type TravelDNAQuestion = {
   optionA: {
     label: string;
     emoji: string;
+    image: string;
     gradientFrom: string;
     gradientTo: string;
     value: number;
@@ -95,6 +96,7 @@ export type TravelDNAQuestion = {
   optionB: {
     label: string;
     emoji: string;
+    image: string;
     gradientFrom: string;
     gradientTo: string;
     value: number;

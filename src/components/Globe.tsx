@@ -7,22 +7,74 @@ import * as THREE from "three";
 
 // Sample destinations for demo
 const DEMO_DESTINATIONS = [
-  { name: "Barcelona, Spain", lat: 41.39, lng: 2.17, theme: "Cultural Immersion", days: 4 },
-  { name: "Kyoto, Japan", lat: 35.01, lng: 135.77, theme: "Ancient Wonders", days: 5 },
-  { name: "Santorini, Greece", lat: 36.39, lng: 25.46, theme: "Island Escape", days: 4 },
-  { name: "Banff, Canada", lat: 51.18, lng: -115.57, theme: "Mountain Adventure", days: 3 },
-  { name: "Marrakech, Morocco", lat: 31.63, lng: -8.0, theme: "Exotic Discovery", days: 5 },
-  { name: "Queenstown, NZ", lat: -45.03, lng: 168.66, theme: "Thrill Seeker", days: 4 },
-  { name: "Reykjavik, Iceland", lat: 64.15, lng: -21.94, theme: "Northern Lights", days: 3 },
-  { name: "Amalfi Coast, Italy", lat: 40.63, lng: 14.60, theme: "Coastal Romance", days: 5 },
-  { name: "Sedona, Arizona", lat: 34.87, lng: -111.76, theme: "Desert Wellness", days: 3 },
-  { name: "Tulum, Mexico", lat: 20.21, lng: -87.43, theme: "Beach Bliss", days: 4 },
+  {
+    name: "Barcelona, Spain", lat: 41.39, lng: 2.17, theme: "Cultural Immersion", days: 4,
+    image: "https://images.unsplash.com/photo-1583422409516-2895a77efded?w=600&h=300&fit=crop",
+    climate: "Warm Mediterranean", tempRange: "18-28°C", costRange: "$1,800 - $2,400",
+  },
+  {
+    name: "Kyoto, Japan", lat: 35.01, lng: 135.77, theme: "Ancient Wonders", days: 5,
+    image: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&h=300&fit=crop",
+    climate: "Mild & Seasonal", tempRange: "10-26°C", costRange: "$2,200 - $3,100",
+  },
+  {
+    name: "Santorini, Greece", lat: 36.39, lng: 25.46, theme: "Island Escape", days: 4,
+    image: "https://images.unsplash.com/photo-1613395877344-13d4a8e0d49e?w=600&h=300&fit=crop",
+    climate: "Sunny & Dry", tempRange: "20-30°C", costRange: "$2,000 - $2,800",
+  },
+  {
+    name: "Banff, Canada", lat: 51.18, lng: -115.57, theme: "Mountain Adventure", days: 3,
+    image: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=600&h=300&fit=crop",
+    climate: "Cool Alpine", tempRange: "-5-20°C", costRange: "$1,500 - $2,200",
+  },
+  {
+    name: "Marrakech, Morocco", lat: 31.63, lng: -8.0, theme: "Exotic Discovery", days: 5,
+    image: "https://images.unsplash.com/photo-1597212618440-806262de4f6b?w=600&h=300&fit=crop",
+    climate: "Hot & Arid", tempRange: "22-38°C", costRange: "$1,400 - $2,000",
+  },
+  {
+    name: "Queenstown, NZ", lat: -45.03, lng: 168.66, theme: "Thrill Seeker", days: 4,
+    image: "https://images.unsplash.com/photo-1589871973318-9ca1258faa5d?w=600&h=300&fit=crop",
+    climate: "Cool & Crisp", tempRange: "5-22°C", costRange: "$2,400 - $3,200",
+  },
+  {
+    name: "Reykjavik, Iceland", lat: 64.15, lng: -21.94, theme: "Northern Lights", days: 3,
+    image: "https://images.unsplash.com/photo-1504829857797-ddff29c27927?w=600&h=300&fit=crop",
+    climate: "Cold & Dramatic", tempRange: "-2-14°C", costRange: "$2,100 - $2,900",
+  },
+  {
+    name: "Amalfi Coast, Italy", lat: 40.63, lng: 14.60, theme: "Coastal Romance", days: 5,
+    image: "https://images.unsplash.com/photo-1455587734955-081b22074882?w=600&h=300&fit=crop",
+    climate: "Warm Mediterranean", tempRange: "16-30°C", costRange: "$2,500 - $3,500",
+  },
+  {
+    name: "Sedona, Arizona", lat: 34.87, lng: -111.76, theme: "Desert Wellness", days: 3,
+    image: "https://images.unsplash.com/photo-1518098268026-4e89f1a2cd8e?w=600&h=300&fit=crop",
+    climate: "Warm & Dry", tempRange: "15-35°C", costRange: "$1,200 - $1,800",
+  },
+  {
+    name: "Tulum, Mexico", lat: 20.21, lng: -87.43, theme: "Beach Bliss", days: 4,
+    image: "https://images.unsplash.com/photo-1682553064541-0add5c1e44f0?w=600&h=300&fit=crop",
+    climate: "Tropical & Humid", tempRange: "24-33°C", costRange: "$1,600 - $2,300",
+  },
 ];
 
 export type GlobeDestination = (typeof DEMO_DESTINATIONS)[number] | null;
 
 interface GlobeProps {
   onDestinationRevealed?: (dest: GlobeDestination) => void;
+}
+
+// ---- Hook to detect mobile ----
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < breakpoint);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [breakpoint]);
+  return isMobile;
 }
 
 // ---- Particle field around the globe ----
@@ -130,12 +182,12 @@ function CardPositionTracker({
       pinRef.current.parent.updateMatrixWorld(true);
     }
 
-    // Get pin tip in world space
-    const pinTip = new THREE.Vector3(0, 0.14, 0);
-    pinRef.current.localToWorld(pinTip);
+    // Get pin head center in world space (pin head sphere is at y=0.12)
+    const pinHead = new THREE.Vector3(0, 0.12, 0);
+    pinRef.current.localToWorld(pinHead);
 
     // Project to NDC
-    const ndc = pinTip.clone().project(cameraRef.current);
+    const ndc = pinHead.clone().project(cameraRef.current);
     if (ndc.z > 1) {
       onPositionUpdate(null);
       return;
@@ -168,20 +220,26 @@ function CameraCapture({
 }
 
 // ---- Interaction handler for canvas ----
+// On mobile, only handles horizontal drag (vertical touch passes through for native scroll)
 function CanvasInteraction({
   isSpinning,
   isAutoRotating,
   isLanded,
   globeRef,
+  isMobile,
 }: {
   isSpinning: React.MutableRefObject<boolean>;
   isAutoRotating: React.MutableRefObject<boolean>;
   isLanded: React.MutableRefObject<boolean>;
   globeRef: React.MutableRefObject<THREE.Mesh | null>;
+  isMobile: boolean;
 }) {
   const { gl } = useThree();
   const isDraggingRef = useRef(false);
   const prevXRef = useRef(0);
+  const startYRef = useRef(0);
+  const startXRef = useRef(0);
+  const dragLockedRef = useRef<"horizontal" | "vertical" | null>(null);
   const tempQuat = useMemo(() => new THREE.Quaternion(), []);
   const idleAxisY = useMemo(() => new THREE.Vector3(0, 1, 0), []);
 
@@ -192,27 +250,45 @@ function CanvasInteraction({
     const handlePointerDown = (e: PointerEvent) => {
       if (!isSpinning.current && !isLanded.current) {
         isDraggingRef.current = true;
-        prevXRef.current = (e as any).clientX;
+        prevXRef.current = e.clientX;
+        startXRef.current = e.clientX;
+        startYRef.current = e.clientY;
+        dragLockedRef.current = null;
       }
     };
 
     const handlePointerMove = (e: PointerEvent) => {
       if (
-        isDraggingRef.current &&
-        !isSpinning.current &&
-        !isAutoRotating.current &&
-        !isLanded.current &&
-        globeRef.current
-      ) {
-        const dx = (e as any).clientX - prevXRef.current;
-        tempQuat.setFromAxisAngle(idleAxisY, dx * 0.005);
-        globeRef.current.quaternion.premultiply(tempQuat);
-        prevXRef.current = (e as any).clientX;
+        !isDraggingRef.current ||
+        isSpinning.current ||
+        isAutoRotating.current ||
+        isLanded.current ||
+        !globeRef.current
+      ) return;
+
+      // On mobile, determine drag direction before committing
+      if (isMobile && !dragLockedRef.current) {
+        const dx = Math.abs(e.clientX - startXRef.current);
+        const dy = Math.abs(e.clientY - startYRef.current);
+        const threshold = 8;
+        if (dx > threshold || dy > threshold) {
+          dragLockedRef.current = dx > dy ? "horizontal" : "vertical";
+        }
+        return; // Wait until direction is determined
       }
+
+      // On mobile, if vertical drag detected, let the browser scroll instead
+      if (isMobile && dragLockedRef.current === "vertical") return;
+
+      const dx = e.clientX - prevXRef.current;
+      tempQuat.setFromAxisAngle(idleAxisY, dx * 0.005);
+      globeRef.current.quaternion.premultiply(tempQuat);
+      prevXRef.current = e.clientX;
     };
 
     const handlePointerUp = () => {
       isDraggingRef.current = false;
+      dragLockedRef.current = null;
     };
 
     canvas.addEventListener("pointerdown", handlePointerDown);
@@ -226,7 +302,7 @@ function CanvasInteraction({
       canvas.removeEventListener("pointerup", handlePointerUp);
       canvas.removeEventListener("pointerleave", handlePointerUp);
     };
-  }, [gl, isSpinning, isAutoRotating, isLanded, tempQuat, idleAxisY, globeRef]);
+  }, [gl, isSpinning, isAutoRotating, isLanded, tempQuat, idleAxisY, globeRef, isMobile]);
 
   return null;
 }
@@ -366,21 +442,21 @@ function Earth({
   );
 }
 
-// ---- Trip card overlay HTML component with genie effect ----
+// ---- Trip card overlay with genie effect (unified for all screen sizes) ----
 function TripCard({
   destination,
   pinScreenPos,
   isVisible,
   onDismiss,
+  isMobile,
 }: {
   destination: GlobeDestination;
   pinScreenPos: { x: number; y: number } | null;
   isVisible: boolean;
   onDismiss: () => void;
+  isMobile: boolean;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
-  // "collapsed" means the card genied into pin due to scroll, can reappear on scroll-to-top
-  const [collapsed, setCollapsed] = useState(false);
   // track the genie animation progress (0 = fully in pin, 1 = fully expanded)
   const [genieProgress, setGenieProgress] = useState(0);
   const animFrameRef = useRef<number>(0);
@@ -410,15 +486,12 @@ function TripCard({
 
     // Card just became visible: expand it
     targetProgress.current = 1;
-    setCollapsed(false);
 
     const handleScroll = () => {
       if (window.scrollY > 5) {
         targetProgress.current = 0;
-        setCollapsed(true);
       } else {
         targetProgress.current = 1;
-        setCollapsed(false);
       }
     };
 
@@ -428,20 +501,29 @@ function TripCard({
 
   if (!destination || !pinScreenPos) return null;
 
-  // Card dimensions
-  const cardW = 320;
-  // Position: bottom-left corner of card sits at the pin head position
-  // Card goes above and to the right of the pin
+  // Responsive card width
+  const cardW = isMobile ? Math.min(300, window.innerWidth - 24) : 340;
+  const imgH = isMobile ? 110 : 140;
+
+  // Position: bottom-left corner of card anchored exactly at pin head
   let cardLeft = pinScreenPos.x;
-  let cardTop = pinScreenPos.y - 380; // card height + small gap
+  let cardTop = pinScreenPos.y;
 
   // Keep card within viewport
   if (typeof window !== "undefined") {
-    const navHeight = 64;
     const vw = window.innerWidth;
-    if (cardLeft + cardW > vw - 12) cardLeft = vw - cardW - 12;
-    if (cardLeft < 12) cardLeft = 12;
-    if (cardTop < navHeight) cardTop = navHeight;
+    const vh = window.innerHeight;
+
+    // Horizontal clamping
+    if (cardLeft + cardW > vw - 8) cardLeft = vw - cardW - 8;
+    if (cardLeft < 8) cardLeft = 8;
+
+    // On mobile, if the card would go above the viewport (pin is too high),
+    // flip it below the pin instead of above
+    if (isMobile && cardTop < 80) {
+      // Card will render below the pin instead
+      cardTop = pinScreenPos.y + 12;
+    }
   }
 
   // Genie effect: scale from 0 at bottom-left corner, with slight vertical squash
@@ -451,17 +533,15 @@ function TripCard({
   const skewX = (1 - p) * -4; // slight skew that resolves as card expands
   const scaleY = 0.6 + p * 0.4; // vertical stretch: starts squished, ends normal
 
+  // Determine if card should render below pin (flipped) on mobile
+  const isFlipped = isMobile && pinScreenPos.y < 80;
+  const transformOrigin = isFlipped ? "top left" : "bottom left";
+  const translateY = isFlipped ? "0%" : "-100%";
+
   const isShowing = p > 0.01;
 
   return (
     <>
-      <style>{`
-        @keyframes genie-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(244, 132, 95, 0.3); }
-          50% { box-shadow: 0 0 12px 4px rgba(244, 132, 95, 0.15); }
-        }
-      `}</style>
-
       {isShowing && (
         <div
           ref={cardRef}
@@ -471,85 +551,155 @@ function TripCard({
             top: `${cardTop}px`,
             width: `${cardW}px`,
             zIndex: 50,
-            transformOrigin: "bottom left",
-            transform: `scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
+            transformOrigin,
+            // translateY(-100%) shifts card up by its own height so bottom-left = pin head
+            transform: `translateY(${translateY}) scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
             opacity,
             pointerEvents: p > 0.8 ? "auto" : "none",
             willChange: "transform, opacity",
           }}
         >
           <div
-            className="bg-white/97 backdrop-blur-sm rounded-2xl border border-teal-100/30 p-6 relative"
+            className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden"
             style={{
+              background: "rgba(255,255,255,0.97)",
               boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
             }}
           >
-            {/* Small triangle pointer at bottom-left pointing down toward pin */}
-            <div
-              style={{
-                position: "absolute",
-                bottom: -8,
-                left: 8,
-                width: 0,
-                height: 0,
-                borderLeft: "8px solid transparent",
-                borderRight: "8px solid transparent",
-                borderTop: "8px solid rgba(255,255,255,0.97)",
-                filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
-              }}
-            />
-
-            {/* Destination header */}
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#F4845F" }}>
+            {/* Destination image */}
+            <div style={{ position: "relative", width: "100%", height: imgH, overflow: "hidden" }}>
+              <img
+                src={destination.image}
+                alt={destination.name}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+              />
+              {/* Gradient overlay for text readability */}
+              <div style={{
+                position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
+                background: "linear-gradient(transparent, rgba(0,0,0,0.5))",
+              }} />
+              {/* Nights badge on image */}
+              <span style={{
+                position: "absolute", top: 8, right: 8,
+                background: "#0D7377", color: "white",
+                fontSize: isMobile ? 10 : 11, fontWeight: 600,
+                padding: "2px 8px", borderRadius: 20,
+              }}>
+                {destination.days} nights
+              </span>
+              {/* Destination name on image */}
+              <div style={{ position: "absolute", bottom: 8, left: 12, right: 12 }}>
+                <p style={{ fontSize: isMobile ? 10 : 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
                   Your Destination
                 </p>
-                <h3 className="text-2xl font-bold text-gray-900 leading-tight">
+                <h3 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
                   {destination.name}
                 </h3>
               </div>
-              <span className="text-white text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#0D7377" }}>
-                {destination.days} nights
-              </span>
             </div>
 
-            {/* Trip theme */}
-            <div className="rounded-lg px-4 py-3 mb-4" style={{ background: "#FFF5F0" }}>
-              <p className="text-xs text-gray-500 mb-0.5">Trip Theme</p>
-              <p className="text-base font-semibold text-gray-900">
-                {destination.theme}
+            {/* Card body */}
+            <div style={{ padding: isMobile ? "10px 12px 12px" : "14px 16px 16px" }}>
+              {/* Trip theme */}
+              <div className="rounded-lg px-3 py-2 mb-2" style={{ background: "#FFF5F0" }}>
+                <p style={{ fontSize: isMobile ? 10 : 11, color: "#999", marginBottom: 1 }}>Trip Theme</p>
+                <p style={{ fontSize: isMobile ? 13 : 14, fontWeight: 600, color: "#2D3436" }}>
+                  {destination.theme}
+                </p>
+              </div>
+
+              {/* Climate and cost row */}
+              <div style={{ display: "flex", gap: 6, marginBottom: isMobile ? 8 : 12 }}>
+                <div className="rounded-lg px-2.5 py-1.5" style={{ flex: 1, background: "#F0FAFA" }}>
+                  <p style={{ fontSize: isMobile ? 9 : 10, color: "#999", marginBottom: 1 }}>Climate</p>
+                  <p style={{ fontSize: isMobile ? 11 : 12, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
+                  <p style={{ fontSize: isMobile ? 10 : 11, color: "#666" }}>{destination.tempRange}</p>
+                </div>
+                <div className="rounded-lg px-2.5 py-1.5" style={{ flex: 1, background: "#FFF8F5" }}>
+                  <p style={{ fontSize: isMobile ? 9 : 10, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
+                  <p style={{ fontSize: isMobile ? 11 : 12, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
+                  <p style={{ fontSize: isMobile ? 10 : 11, color: "#666" }}>Flights + hotel + activities</p>
+                </div>
+              </div>
+
+              {/* Package includes (compact) */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 4 : 6, marginBottom: isMobile ? 10 : 14 }}>
+                {[
+                  { icon: "\u2708\uFE0F", label: "Flights" },
+                  { icon: "\uD83C\uDFE8", label: "Hotel" },
+                  { icon: "\uD83C\uDFAF", label: "Activities" },
+                  { icon: "\uD83D\uDE97", label: "Transport" },
+                ].map((item) => (
+                  <span
+                    key={item.label}
+                    style={{
+                      fontSize: isMobile ? 10 : 11, color: "#666", background: "#f5f5f3",
+                      padding: isMobile ? "2px 6px" : "3px 8px", borderRadius: 6, display: "inline-flex",
+                      alignItems: "center", gap: 3,
+                    }}
+                  >
+                    <span style={{ fontSize: isMobile ? 11 : 13 }}>{item.icon}</span>
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* CTA buttons */}
+              <div style={{ display: "flex", gap: 6 }}>
+                <button style={{
+                  flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
+                  padding: isMobile ? "8px 0" : "10px 0", borderRadius: 12,
+                  fontSize: isMobile ? 12 : 13, border: "none", cursor: "pointer",
+                }}>
+                  Book This Trip
+                </button>
+                <button style={{
+                  padding: isMobile ? "8px 12px" : "10px 16px",
+                  border: "1px solid #e0e0e0", color: "#666",
+                  borderRadius: 12, fontSize: isMobile ? 12 : 13,
+                  background: "white", cursor: "pointer",
+                }}>
+                  Details
+                </button>
+              </div>
+
+              <p style={{ fontSize: isMobile ? 10 : 11, color: "#bbb", textAlign: "center", marginTop: 6 }}>
+                Demo preview. Real trips coming soon.
               </p>
             </div>
 
-            {/* Package includes */}
-            <div className="space-y-2 mb-5">
-              {[
-                { icon: "\u2708\uFE0F", label: "Round-trip flights included" },
-                { icon: "\uD83C\uDFE8", label: "4-star hotel, free cancellation" },
-                { icon: "\uD83C\uDFAF", label: "Curated activities & dining" },
-                { icon: "\uD83D\uDE97", label: "Ground transportation arranged" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="text-base">{item.icon}</span>
-                  <span>{item.label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* CTA buttons */}
-            <div className="flex gap-3">
-              <button className="flex-1 text-white font-semibold py-2.5 rounded-xl text-sm cursor-pointer transition-colors" style={{ background: "#0D7377" }}>
-                Book This Trip
-              </button>
-              <button className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm cursor-pointer transition-colors hover:border-teal-400">
-                Details
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-400 text-center mt-3">
-              Demo preview. Real trips coming soon.
-            </p>
+            {/* Small triangle pointer at bottom-left pointing down toward pin */}
+            {!isFlipped && (
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: -8,
+                  left: 8,
+                  width: 0,
+                  height: 0,
+                  borderLeft: "8px solid transparent",
+                  borderRight: "8px solid transparent",
+                  borderTop: "8px solid rgba(255,255,255,0.97)",
+                  filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
+                }}
+              />
+            )}
+            {/* Arrow pointing up when card is flipped below pin */}
+            {isFlipped && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: -8,
+                  left: 8,
+                  width: 0,
+                  height: 0,
+                  borderLeft: "8px solid transparent",
+                  borderRight: "8px solid transparent",
+                  borderBottom: "8px solid rgba(255,255,255,0.97)",
+                  filter: "drop-shadow(0 -2px 2px rgba(0,0,0,0.08))",
+                }}
+              />
+            )}
           </div>
         </div>
       )}
@@ -563,6 +713,7 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
   const [hasSpun, setHasSpun] = useState(false);
   const [showCard, setShowCard] = useState(false);
   const [cardPosition, setCardPosition] = useState<{ x: number; y: number } | null>(null);
+  const isMobile = useIsMobile();
 
   // Mutable refs for animation state
   const spinSpeed = useRef(0);
@@ -663,9 +814,12 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
   return (
     <div className="relative w-full h-full">
       <Canvas
-        camera={{ position: [0, 0, 3], fov: 45 }}
+        camera={{ position: [0, 0, isMobile ? 3.5 : 3], fov: isMobile ? 50 : 45 }}
         className="globe-canvas"
-        style={{ background: "transparent" }}
+        style={{
+          background: "transparent",
+          touchAction: "pan-y",  // Allow vertical scroll to pass through canvas
+        }}
       >
         <CameraCapture cameraRef={cameraRef} />
         <ambientLight intensity={0.9} />
@@ -694,6 +848,7 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
           isAutoRotating={isAutoRotatingRef}
           isLanded={isLandedRef}
           globeRef={globeRef}
+          isMobile={isMobile}
         />
         <CardPositionTracker
           pinRef={pinRef}
@@ -703,18 +858,19 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
         />
       </Canvas>
 
-      {/* Trip card overlay */}
+      {/* Trip card overlay - same genie effect on all screen sizes */}
       <TripCard
         destination={destination.current}
         pinScreenPos={cardPosition}
         isVisible={showCard}
         onDismiss={handleDismissCard}
+        isMobile={isMobile}
       />
 
       {/* Spin button overlay */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+      <div className={`absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 sm:gap-3 ${isMobile ? "bottom-3" : "bottom-8"}`}>
         {!hasSpun && !isSpinning && (
-          <p className="text-sm text-teal-light/80 animate-pulse">
+          <p className="text-xs sm:text-sm text-teal-light/80 animate-pulse text-center px-4">
             Spin the globe to discover your trip
           </p>
         )}
@@ -723,7 +879,7 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
           onClick={handleSpin}
           disabled={isSpinning}
           className={`
-            px-8 py-3 rounded-full font-semibold text-white text-lg
+            px-6 sm:px-8 py-2.5 sm:py-3 rounded-full font-semibold text-white text-base sm:text-lg
             transition-all duration-300 cursor-pointer
             ${
               isSpinning

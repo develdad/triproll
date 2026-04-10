@@ -535,7 +535,8 @@ function DesktopTripCard({
     targetProgress.current = 1;
 
     const handleScroll = () => {
-      targetProgress.current = window.scrollY > 5 ? 0 : 1;
+      const scrollRange = 150;
+      targetProgress.current = Math.max(0, 1 - window.scrollY / scrollRange);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -645,7 +646,8 @@ function MobileTripCard({
     targetProgress.current = 1;
 
     const handleScroll = () => {
-      targetProgress.current = window.scrollY > 5 ? 0 : 1;
+      const scrollRange = 150;
+      targetProgress.current = Math.max(0, 1 - window.scrollY / scrollRange);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });

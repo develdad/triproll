@@ -109,13 +109,7 @@ function Particles() {
 
   return (
     <points ref={pointsRef} geometry={geo}>
-      <pointsMaterial
-        size={0.015}
-        color="#ffffff"
-        transparent
-        opacity={0.4}
-        sizeAttenuation
-      />
+      <pointsMaterial size={0.015} color="#ffffff" transparent opacity={0.4} sizeAttenuation />
     </points>
   );
 }
@@ -403,7 +397,6 @@ function CardBody({
 
   return (
     <>
-      {/* Destination image */}
       <div style={{ position: "relative", width: "100%", height: imgH, overflow: "hidden" }}>
         <img
           src={destination.image}
@@ -423,7 +416,7 @@ function CardBody({
           {destination.days} nights
         </span>
         <div style={{ position: "absolute", bottom: 10, left: 14, right: 14 }}>
-          <p style={{ fontSize: isMobile ? 11 : 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
+          <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
             Your Destination
           </p>
           <h3 style={{ fontSize: isMobile ? 22 : 20, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
@@ -432,9 +425,7 @@ function CardBody({
         </div>
       </div>
 
-      {/* Card body */}
       <div style={{ padding: isMobile ? "16px 16px 20px" : "14px 16px 16px" }}>
-        {/* Trip theme */}
         <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: "#FFF5F0" }}>
           <p style={{ fontSize: 11, color: "#999", marginBottom: 2 }}>Trip Theme</p>
           <p style={{ fontSize: isMobile ? 15 : 14, fontWeight: 600, color: "#2D3436" }}>
@@ -442,7 +433,6 @@ function CardBody({
           </p>
         </div>
 
-        {/* Climate and cost row */}
         <div style={{ display: "flex", gap: 8, marginBottom: isMobile ? 14 : 12 }}>
           <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#F0FAFA" }}>
             <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Climate</p>
@@ -456,7 +446,6 @@ function CardBody({
           </div>
         </div>
 
-        {/* Package includes */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: isMobile ? 16 : 14 }}>
           {[
             { icon: "\u2708\uFE0F", label: "Flights" },
@@ -478,7 +467,6 @@ function CardBody({
           ))}
         </div>
 
-        {/* CTA buttons */}
         <div style={{ display: "flex", gap: 8 }}>
           <button style={{
             flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
@@ -505,7 +493,13 @@ function CardBody({
   );
 }
 
-// ---- DESKTOP: Trip card with genie effect from pin bottom-left ----
+// ---- Smooth cubic ease-out for genie feel ----
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// ---- DESKTOP: Trip card with genie from pin head (bottom-left origin) ----
+// Card travels from pin position to its final resting spot.
 function DesktopTripCard({
   destination,
   pinScreenPos,
@@ -523,8 +517,9 @@ function DesktopTripCard({
     const animate = () => {
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
-        if (Math.abs(diff) < 0.005) return targetProgress.current;
-        return prev + diff * 0.12;
+        if (Math.abs(diff) < 0.003) return targetProgress.current;
+        // Slower, smoother easing
+        return prev + diff * 0.06;
       });
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -550,34 +545,40 @@ function DesktopTripCard({
   if (!destination || !pinScreenPos) return null;
 
   const cardW = 340;
-  let cardLeft = pinScreenPos.x;
-  const cardTop = pinScreenPos.y;
 
+  // Final resting position for the card (bottom-left at pin, then clamped)
+  let finalLeft = pinScreenPos.x;
   if (typeof window !== "undefined") {
     const vw = window.innerWidth;
-    if (cardLeft + cardW > vw - 12) cardLeft = vw - cardW - 12;
-    if (cardLeft < 12) cardLeft = 12;
+    if (finalLeft + cardW > vw - 12) finalLeft = vw - cardW - 12;
+    if (finalLeft < 12) finalLeft = 12;
   }
+  // Card sits above the pin (translateY(-100%) equivalent)
+  // We'll compute the card's bottom-left anchor point at the pin
+  // and the card position naturally offsets upward via translateY(-100%)
 
-  const p = genieProgress;
+  // Apply eased progress
+  const p = easeOutCubic(genieProgress);
+  const rawP = genieProgress;
+
   const scale = p;
-  const opacity = Math.min(p * 2, 1);
-  const skewX = (1 - p) * -4;
-  const scaleY = 0.6 + p * 0.4;
-  const isShowing = p > 0.01;
+  const opacity = Math.min(p * 1.8, 1);
+  const skewX = (1 - p) * -6;
+  const scaleY = 0.5 + p * 0.5;
+  const isShowing = rawP > 0.01;
 
   return isShowing ? (
     <div
       style={{
         position: "fixed",
-        left: `${cardLeft}px`,
-        top: `${cardTop}px`,
+        left: `${finalLeft}px`,
+        top: `${pinScreenPos.y}px`,
         width: `${cardW}px`,
         zIndex: 50,
         transformOrigin: "bottom left",
         transform: `translateY(-100%) scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
         opacity,
-        pointerEvents: p > 0.8 ? "auto" : "none",
+        pointerEvents: rawP > 0.8 ? "auto" : "none",
         willChange: "transform, opacity",
       }}
     >
@@ -589,7 +590,6 @@ function DesktopTripCard({
         }}
       >
         <CardBody destination={destination} isMobile={false} />
-        {/* Triangle pointer toward pin */}
         <div
           style={{
             position: "absolute", bottom: -8, left: 8,
@@ -605,9 +605,9 @@ function DesktopTripCard({
   ) : null;
 }
 
-// ---- MOBILE: Full-screen modal card with center-origin genie ----
-// Fills from just below the navbar to the bottom, with the globe/pin
-// visible behind a semi-transparent backdrop. Genie origin = center of card.
+// ---- MOBILE: Full-screen modal card with genie from pin head (center origin) ----
+// At p=0 the card is a tiny point at the pin head. At p=1 it fills the screen.
+// The card translates from the pin position to screen center as it scales up.
 function MobileTripCard({
   destination,
   pinScreenPos,
@@ -627,8 +627,9 @@ function MobileTripCard({
     const animate = () => {
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
-        if (Math.abs(diff) < 0.005) return targetProgress.current;
-        return prev + diff * 0.12;
+        if (Math.abs(diff) < 0.003) return targetProgress.current;
+        // Slower, smoother genie feel
+        return prev + diff * 0.06;
       });
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -653,24 +654,43 @@ function MobileTripCard({
 
   if (!destination || !pinScreenPos) return null;
 
-  const p = genieProgress;
-  const isShowing = p > 0.01;
+  const rawP = genieProgress;
+  const p = easeOutCubic(rawP);
+  const isShowing = rawP > 0.01;
 
-  // Navbar is ~64px. Inset card ~20% from edges for breathing room
+  // Final card rect (20% smaller than full screen, below navbar)
   const vw = typeof window !== "undefined" ? window.innerWidth : 375;
   const vh = typeof window !== "undefined" ? window.innerHeight : 700;
-  const hMargin = Math.round(vw * 0.1);         // 10% each side = 20% total reduction
-  const topOffset = 72 + Math.round((vh - 72) * 0.1);  // 10% below navbar
+  const hMargin = Math.round(vw * 0.1);
+  const navH = 72;
+  const topMargin = navH + Math.round((vh - navH) * 0.1);
   const bottomMargin = Math.round(vh * 0.1);
 
-  // Genie effect: scale from center, vertical squash, slight vertical skew
+  const finalW = vw - hMargin * 2;
+  const finalH = vh - topMargin - bottomMargin;
+  const finalCenterX = hMargin + finalW / 2;
+  const finalCenterY = topMargin + finalH / 2;
+
+  // Pin position is where the genie starts/ends
+  const pinX = pinScreenPos.x;
+  const pinY = pinScreenPos.y;
+
+  // Interpolate center position from pin to final center
+  const currentCenterX = pinX + (finalCenterX - pinX) * p;
+  const currentCenterY = pinY + (finalCenterY - pinY) * p;
+
+  // Scale: from 0 at pin to 1 at full size
   const scale = p;
-  const opacity = Math.min(p * 2, 1);
-  const scaleY = 0.7 + p * 0.3;
+  const scaleY = 0.6 + p * 0.4;
+  const opacity = Math.min(rawP * 2.5, 1);
+
+  // Position the card so its center is at the interpolated point
+  const left = currentCenterX - (finalW / 2);
+  const top = currentCenterY - (finalH / 2);
 
   return (
     <>
-      {/* Semi-transparent backdrop so globe/pin are visible behind */}
+      {/* Backdrop */}
       {isShowing && (
         <div
           style={{
@@ -678,7 +698,7 @@ function MobileTripCard({
             inset: 0,
             zIndex: 49,
             background: `rgba(0,0,0,${0.25 * p})`,
-            pointerEvents: p > 0.5 ? "auto" : "none",
+            pointerEvents: rawP > 0.5 ? "auto" : "none",
           }}
           onClick={onDismiss}
         />
@@ -688,15 +708,15 @@ function MobileTripCard({
         <div
           style={{
             position: "fixed",
-            top: `${topOffset}px`,
-            left: `${hMargin}px`,
-            right: `${hMargin}px`,
-            bottom: `${bottomMargin}px`,
+            left: `${left}px`,
+            top: `${top}px`,
+            width: `${finalW}px`,
+            height: `${finalH}px`,
             zIndex: 50,
             transformOrigin: "center center",
             transform: `scale(${scale}) scaleY(${scaleY})`,
             opacity,
-            pointerEvents: p > 0.8 ? "auto" : "none",
+            pointerEvents: rawP > 0.8 ? "auto" : "none",
             willChange: "transform, opacity",
             display: "flex",
             flexDirection: "column",
@@ -709,7 +729,6 @@ function MobileTripCard({
               boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.2 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
             }}
           >
-            {/* Scrollable content area */}
             <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
               <CardBody destination={destination} isMobile={true} />
             </div>
@@ -818,53 +837,56 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
   }, []);
 
   return (
-    <div className="relative w-full h-full">
-      <Canvas
-        camera={{ position: [0, 0, isMobile ? 3.15 : 3], fov: 45 }}
-        className="globe-canvas"
-        style={{
-          background: "transparent",
-          touchAction: "pan-y",
-        }}
-      >
-        <CameraCapture cameraRef={cameraRef} />
-        <ambientLight intensity={0.9} />
-        <directionalLight position={[5, 2, 4]} intensity={1.8} color="#ffffff" />
-        <directionalLight position={[-4, -1, -3]} intensity={0.6} color="#aaddff" />
-        <pointLight position={[-2, 1, 4]} intensity={0.3} color="#F4845F" />
-        <directionalLight position={[0, 0, 5]} intensity={0.5} color="#ffffff" />
+    <div className="relative w-full h-full flex flex-col">
+      {/* Globe canvas - fills available space, vertically centered */}
+      <div className="flex-1 relative">
+        <Canvas
+          camera={{ position: [0, 0, isMobile ? 3.15 : 3], fov: 45 }}
+          className="globe-canvas"
+          style={{
+            background: "transparent",
+            touchAction: "pan-y",
+          }}
+        >
+          <CameraCapture cameraRef={cameraRef} />
+          <ambientLight intensity={0.9} />
+          <directionalLight position={[5, 2, 4]} intensity={1.8} color="#ffffff" />
+          <directionalLight position={[-4, -1, -3]} intensity={0.6} color="#aaddff" />
+          <pointLight position={[-2, 1, 4]} intensity={0.3} color="#F4845F" />
+          <directionalLight position={[0, 0, 5]} intensity={0.5} color="#ffffff" />
 
-        <Suspense fallback={null}>
-          <Earth
-            onPinReady={handlePinReady}
-            onSpinComplete={handleSpinComplete}
-            spinSpeed={spinSpeed}
-            spinAxis={spinAxis}
-            targetQuaternion={targetQuaternion}
+          <Suspense fallback={null}>
+            <Earth
+              onPinReady={handlePinReady}
+              onSpinComplete={handleSpinComplete}
+              spinSpeed={spinSpeed}
+              spinAxis={spinAxis}
+              targetQuaternion={targetQuaternion}
+              isSpinning={isSpinningRef}
+              isAutoRotating={isAutoRotatingRef}
+              isLanded={isLandedRef}
+              destination={destination}
+              globeRef={globeRef}
+            />
+          </Suspense>
+          <Particles />
+          <CanvasInteraction
             isSpinning={isSpinningRef}
             isAutoRotating={isAutoRotatingRef}
             isLanded={isLandedRef}
-            destination={destination}
             globeRef={globeRef}
+            isMobile={isMobile}
           />
-        </Suspense>
-        <Particles />
-        <CanvasInteraction
-          isSpinning={isSpinningRef}
-          isAutoRotating={isAutoRotatingRef}
-          isLanded={isLandedRef}
-          globeRef={globeRef}
-          isMobile={isMobile}
-        />
-        <CardPositionTracker
-          pinRef={pinRef}
-          cameraRef={cameraRef}
-          showCard={showCard}
-          onPositionUpdate={handlePositionUpdate}
-        />
-      </Canvas>
+          <CardPositionTracker
+            pinRef={pinRef}
+            cameraRef={cameraRef}
+            showCard={showCard}
+            onPositionUpdate={handlePositionUpdate}
+          />
+        </Canvas>
+      </div>
 
-      {/* Trip card: desktop pin-anchored genie vs mobile full-screen modal genie */}
+      {/* Trip card: desktop pin-anchored vs mobile full-screen, both genie from pin */}
       {isMobile ? (
         <MobileTripCard
           destination={destination.current}
@@ -880,8 +902,8 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
         />
       )}
 
-      {/* Spin button overlay */}
-      <div className={`absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 sm:gap-3 ${isMobile ? "bottom-3" : "bottom-8"}`}>
+      {/* Spin button overlay - sits at bottom of the container */}
+      <div className="flex flex-col items-center gap-2 sm:gap-3 pb-3 sm:pb-6 pt-1">
         {!hasSpun && !isSpinning && (
           <p className="text-xs sm:text-sm text-teal-light/80 animate-pulse text-center px-4">
             Spin the globe to discover your trip

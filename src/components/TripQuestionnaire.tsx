@@ -38,8 +38,29 @@ export default function TripQuestionnaire() {
     { title: "Review", icon: "✅" },
   ];
 
+  const [dateError, setDateError] = useState<string | null>(null);
+
   const handleDateChange = (field: "departureDate" | "returnDate", value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setDateError(null);
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+
+      // Validate: return date must be after departure date
+      if (updated.departureDate && updated.returnDate) {
+        const dep = new Date(updated.departureDate);
+        const ret = new Date(updated.returnDate);
+        if (ret <= dep) {
+          setDateError("Return date must be after your departure date.");
+        } else {
+          const days = Math.ceil((ret.getTime() - dep.getTime()) / (1000 * 60 * 60 * 24));
+          if (days < 2) {
+            setDateError("Trips must be at least 2 nights. Even a quick getaway needs a little breathing room.");
+          }
+        }
+      }
+
+      return updated;
+    });
   };
 
   const handleBudgetChange = (min: number, max: number) => {
@@ -226,10 +247,17 @@ export default function TripQuestionnaire() {
                 <input
                   type="date"
                   value={formData.returnDate}
+                  min={formData.departureDate || undefined}
                   onChange={(e) => handleDateChange("returnDate", e.target.value)}
                   className="w-full px-4 py-3 border border-silver/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep focus:border-transparent"
                 />
               </div>
+
+              {dateError && (
+                <div className="p-3 rounded-lg bg-peach/10 border border-peach/30 text-sm text-coral">
+                  {dateError}
+                </div>
+              )}
             </div>
           )}
 
@@ -444,7 +472,7 @@ export default function TripQuestionnaire() {
             <button
               onClick={() => setStep(step + 1)}
               disabled={
-                (step === 0 && (!formData.departureDate || !formData.returnDate)) ||
+                (step === 0 && (!formData.departureDate || !formData.returnDate || !!dateError)) ||
                 (step === 3 && !formData.departureCity)
               }
               className="flex-1 px-6 py-3 bg-teal-deep text-white rounded-lg hover:bg-ocean transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"

@@ -23,11 +23,17 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
 
   const itinerary = trip.itinerary as {
     flights: {
-      outbound: { from: string; to: string; date: string; airline: string };
-      return: { from: string; to: string; date: string; airline: string };
+      outbound: { from: string; to: string; date: string; airline: string; estimatedHours?: number };
+      return: { from: string; to: string; date: string; airline: string; estimatedHours?: number };
     };
     accommodation: { name: string; nights: number; type: string };
     activities: string[];
+    travelInfo?: {
+      estimatedOneWayHours: number;
+      travelDaysEachWay: number;
+      stayNights: number;
+      activityDays: number;
+    };
   };
 
   const totalPrice = (trip.price_cents / 100).toLocaleString("en-US", {
@@ -49,7 +55,7 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
     year: "numeric",
   });
 
-  const days = Math.max(
+  const totalNights = Math.max(
     1,
     Math.ceil(
       (new Date(trip.end_date).getTime() -
@@ -57,6 +63,11 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
         (1000 * 60 * 60 * 24)
     )
   );
+
+  // Use travelInfo if available (new trips), fall back to totalNights (legacy)
+  const stayNights = itinerary.travelInfo?.stayNights ?? totalNights;
+  const activityDays = itinerary.travelInfo?.activityDays ?? itinerary.activities.length;
+  const estimatedFlightHours = itinerary.travelInfo?.estimatedOneWayHours ?? itinerary.flights.outbound.estimatedHours;
 
   return (
     <div className="flex flex-col min-h-screen bg-cloud">
@@ -90,11 +101,25 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
                 </span>
               </div>
               <div>
-                <span className="text-white/60 block">Duration</span>
+                <span className="text-white/60 block">Trip Length</span>
                 <span className="font-medium">
-                  {days} {days === 1 ? "night" : "nights"}
+                  {totalNights} {totalNights === 1 ? "night" : "nights"} total
                 </span>
               </div>
+              {stayNights < totalNights && (
+                <div>
+                  <span className="text-white/60 block">On the Ground</span>
+                  <span className="font-medium">
+                    {stayNights} {stayNights === 1 ? "night" : "nights"}
+                  </span>
+                </div>
+              )}
+              {estimatedFlightHours && (
+                <div>
+                  <span className="text-white/60 block">Flight Time</span>
+                  <span className="font-medium">~{estimatedFlightHours}h each way</span>
+                </div>
+              )}
               <div>
                 <span className="text-white/60 block">Total Price</span>
                 <span className="font-medium text-lg">{totalPrice}</span>
@@ -137,6 +162,9 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
                 </p>
                 <p className="text-sm text-slate mt-1">
                   {itinerary.flights.outbound.airline}
+                  {itinerary.flights.outbound.estimatedHours && (
+                    <span className="text-silver ml-2">~{itinerary.flights.outbound.estimatedHours}h</span>
+                  )}
                 </p>
               </div>
 
@@ -166,6 +194,9 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
                 </p>
                 <p className="text-sm text-slate mt-1">
                   {itinerary.flights.return.airline}
+                  {itinerary.flights.return.estimatedHours && (
+                    <span className="text-silver ml-2">~{itinerary.flights.return.estimatedHours}h</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -219,7 +250,7 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
                   <div>
                     <p className="text-charcoal font-medium">{activity}</p>
                     <p className="text-xs text-slate mt-1">
-                      Day {index + 1} of {days}
+                      Day {index + 1} of {activityDays}
                     </p>
                   </div>
                 </div>

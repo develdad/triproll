@@ -205,9 +205,44 @@ export async function generateTrip(tripRequestId: string) {
   // Import destinations from constants (server-side)
   const { SAMPLE_DESTINATIONS } = await import("@/lib/constants");
 
-  // Score each destination based on DNA + budget fit
+  // ---- Travel time estimation ----
+  // Rough one-way travel hours from major US cities to destination regions.
+  // Includes airport time, layovers, and transit. These are conservative estimates.
+  const TRAVEL_HOURS: Record<string, number> = {
+    "Asia": 20,
+    "Oceania": 22,
+    "Europe": 12,
+    "Africa": 18,
+    "South America": 12,
+    "Middle East": 18,
+  };
+
+  // Calculate trip length in days
+  const tripDays = Math.max(1, Math.ceil(
+    (new Date(tripRequest.return_date).getTime() - new Date(tripRequest.departure_date).getTime()) / (1000 * 60 * 60 * 24)
+  ));
+
+  // Filter destinations by travel feasibility.
+  // Rule: one-way travel time (in days, rounded up) should be at most 25% of the total trip.
+  // E.g., a 20-hour flight = ~1 travel day each way = 2 travel days total.
+  // For a 4-day trip, 2 travel days = 50% -> not feasible.
+  // For an 8-day trip, 2 travel days = 25% -> feasible.
+  const feasibleDestinations = SAMPLE_DESTINATIONS.filter((dest) => {
+    const oneWayHours = TRAVEL_HOURS[dest.region] ?? 6; // Default: domestic/nearby
+    const totalTravelDays = Math.ceil(oneWayHours / 12) * 2; // Round up to half-days, both ways
+    const travelRatio = totalTravelDays / tripDays;
+    return travelRatio <= 0.25;
+  });
+
+  // If no destinations pass the filter (very short trip), fall back to all
+  // but apply a heavy penalty for long travel times
+  const candidateDestinations = feasibleDestinations.length >= 2
+    ? feasibleDestinations
+    : SAMPLE_DESTINATIONS;
+
+  // Score each destination based on DNA + budget fit + travel feasibility
   type ScoredDest = typeof SAMPLE_DESTINATIONS[number] & { score: number };
-  const scored: ScoredDest[] = SAMPLE_DESTINATIONS.map((dest) => {
+  const scored: ScoredDest[] = candidateDestinations.map((dest) => {
     let score = 0;
 
     // Budget fit: prefer destinations within the user's budget range
@@ -216,6 +251,13 @@ export async function generateTrip(tripRequestId: string) {
     const budgetRange = tripRequest.budget_max - tripRequest.budget_min;
     // Lower difference = higher score (max 30 points)
     score += Math.max(0, 30 - (budgetDiff / Math.max(budgetRange, 1)) * 15);
+
+    // Travel time penalty: penalize destinations where travel eats into the trip
+    const oneWayHours = TRAVEL_HOURS[dest.region] ?? 6;
+    const totalTravelDays = Math.ceil(oneWayHours / 12) * 2;
+    const travelRatio = totalTravelDays / tripDays;
+    // Max 20 point penalty for travel-heavy trips
+    score -= travelRatio * 20;
 
     // DNA matching (if available)
     if (dna) {
@@ -252,39 +294,56 @@ export async function generateTrip(tripRequestId: string) {
   scored.sort((a, b) => b.score - a.score);
   const chosen = scored[0];
 
-  // Calculate trip dates and price
+  // Calculate trip dates, stay duration, and price
   const startDate = tripRequest.departure_date;
   const endDate = tripRequest.return_date;
-  const days = Math.max(1, Math.ceil(
+  const totalNights = Math.max(1, Math.ceil(
     (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
   ));
+
+  // Subtract travel days from stay duration to get actual "on the ground" days
+  const chosenOneWayHours = TRAVEL_HOURS[chosen.region] ?? 6;
+  const travelDaysEachWay = chosenOneWayHours >= 12 ? 1 : 0; // Lose a day each way for long-haul
+  const stayNights = Math.max(1, totalNights - (travelDaysEachWay * 2));
+  // Full activity days = stay nights (you have full days between arrival and departure)
+  const activityDays = stayNights;
+
   const pricePerPerson = Math.round(
     chosen.avgPrice * (0.85 + Math.random() * 0.3)
   );
   const totalPrice = pricePerPerson * tripRequest.party_size;
 
-  // Build a sample itinerary
+  // Build the itinerary
+  const airlines = ["United Airlines", "Delta", "Emirates", "British Airways", "Lufthansa", "JAL"];
   const itinerary = {
     flights: {
       outbound: {
         from: tripRequest.departure_city,
         to: `${chosen.name}, ${chosen.country}`,
         date: startDate,
-        airline: ["United Airlines", "Delta", "Emirates", "British Airways", "Lufthansa", "JAL"][Math.floor(Math.random() * 6)],
+        airline: airlines[Math.floor(Math.random() * airlines.length)],
+        estimatedHours: chosenOneWayHours,
       },
       return: {
         from: `${chosen.name}, ${chosen.country}`,
         to: tripRequest.departure_city,
         date: endDate,
-        airline: ["United Airlines", "Delta", "Emirates", "British Airways", "Lufthansa", "JAL"][Math.floor(Math.random() * 6)],
+        airline: airlines[Math.floor(Math.random() * airlines.length)],
+        estimatedHours: chosenOneWayHours,
       },
     },
     accommodation: {
       name: `${["Grand", "Boutique", "The", "Hotel"][Math.floor(Math.random() * 4)]} ${chosen.name} ${["Resort", "Hotel", "Inn", "Lodge", "Suites"][Math.floor(Math.random() * 5)]}`,
-      nights: days,
+      nights: stayNights,
       type: dna && dna.budget > 0 ? "4-star" : "3-star",
     },
-    activities: generateActivities(chosen.tags, days),
+    activities: generateActivities(chosen.tags, activityDays),
+    travelInfo: {
+      estimatedOneWayHours: chosenOneWayHours,
+      travelDaysEachWay,
+      stayNights,
+      activityDays,
+    },
   };
 
   // Insert the trip (authenticated users have INSERT grant + RLS policy)
@@ -367,8 +426,8 @@ function generateActivities(tags: string[], days: number): string[] {
     if (!usedActivities.has(g)) activities.push(g);
   }
 
-  // Return one activity per day (roughly)
-  return activities.slice(0, Math.max(days, 3));
+  // Return exactly one activity per day
+  return activities.slice(0, days);
 }
 
 // Sign out

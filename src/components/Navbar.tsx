@@ -15,7 +15,6 @@ export default function Navbar() {
             src="/logo-mini.png"
             alt="TripRoll"
             className="h-9 sm:h-10 w-auto"
-            style={{ filter: "brightness(0) saturate(100%) invert(27%) sepia(96%) saturate(1044%) hue-rotate(156deg) brightness(92%) contrast(97%)" }}
           />
         </Link>
 

@@ -124,39 +124,21 @@ function Particles() {
 function DestinationPin({ pinRef }: { pinRef: React.MutableRefObject<THREE.Group | null> }) {
   return (
     <group ref={pinRef} scale={[0, 0, 0]}>
-      {/* Pin head (larger sphere) */}
       <mesh position={[0, 0.12, 0]}>
         <sphereGeometry args={[0.05, 16, 16]} />
-        <meshStandardMaterial
-          color="#F4845F"
-          emissive="#F4845F"
-          emissiveIntensity={0.5}
-        />
+        <meshStandardMaterial color="#F4845F" emissive="#F4845F" emissiveIntensity={0.5} />
       </mesh>
-      {/* Pin stick (longer, thicker) */}
       <mesh position={[0, 0.05, 0]}>
         <cylinderGeometry args={[0.008, 0.008, 0.1, 8]} />
         <meshStandardMaterial color="#E17055" />
       </mesh>
-      {/* Glow ring at base */}
       <mesh position={[0, 0.003, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.03, 0.06, 32]} />
-        <meshBasicMaterial
-          color="#F4845F"
-          transparent
-          opacity={0.5}
-          side={THREE.DoubleSide}
-        />
+        <meshBasicMaterial color="#F4845F" transparent opacity={0.5} side={THREE.DoubleSide} />
       </mesh>
-      {/* Outer pulse ring */}
       <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.06, 0.08, 32]} />
-        <meshBasicMaterial
-          color="#F4845F"
-          transparent
-          opacity={0.2}
-          side={THREE.DoubleSide}
-        />
+        <meshBasicMaterial color="#F4845F" transparent opacity={0.2} side={THREE.DoubleSide} />
       </mesh>
     </group>
   );
@@ -177,16 +159,13 @@ function CardPositionTracker({
   useFrame(() => {
     if (!showCard || !pinRef.current || !pinRef.current.visible || !cameraRef.current) return;
 
-    // Update matrices
     if (pinRef.current.parent) {
       pinRef.current.parent.updateMatrixWorld(true);
     }
 
-    // Get pin head center in world space (pin head sphere is at y=0.12)
     const pinHead = new THREE.Vector3(0, 0.12, 0);
     pinRef.current.localToWorld(pinHead);
 
-    // Project to NDC
     const ndc = pinHead.clone().project(cameraRef.current);
     if (ndc.z > 1) {
       onPositionUpdate(null);
@@ -220,7 +199,6 @@ function CameraCapture({
 }
 
 // ---- Interaction handler for canvas ----
-// On mobile, only handles horizontal drag (vertical touch passes through for native scroll)
 function CanvasInteraction({
   isSpinning,
   isAutoRotating,
@@ -237,8 +215,8 @@ function CanvasInteraction({
   const { gl } = useThree();
   const isDraggingRef = useRef(false);
   const prevXRef = useRef(0);
-  const startYRef = useRef(0);
   const startXRef = useRef(0);
+  const startYRef = useRef(0);
   const dragLockedRef = useRef<"horizontal" | "vertical" | null>(null);
   const tempQuat = useMemo(() => new THREE.Quaternion(), []);
   const idleAxisY = useMemo(() => new THREE.Vector3(0, 1, 0), []);
@@ -266,7 +244,6 @@ function CanvasInteraction({
         !globeRef.current
       ) return;
 
-      // On mobile, determine drag direction before committing
       if (isMobile && !dragLockedRef.current) {
         const dx = Math.abs(e.clientX - startXRef.current);
         const dy = Math.abs(e.clientY - startYRef.current);
@@ -274,10 +251,9 @@ function CanvasInteraction({
         if (dx > threshold || dy > threshold) {
           dragLockedRef.current = dx > dy ? "horizontal" : "vertical";
         }
-        return; // Wait until direction is determined
+        return;
       }
 
-      // On mobile, if vertical drag detected, let the browser scroll instead
       if (isMobile && dragLockedRef.current === "vertical") return;
 
       const dx = e.clientX - prevXRef.current;
@@ -333,14 +309,11 @@ function Earth({
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const pinRef = useRef<THREE.Group>(null);
-  const { camera } = useThree();
 
-  // Load NASA Blue Marble Earth texture
   const earthTexture = useTexture(
     "https://unpkg.com/three-globe@2.34.2/example/img/earth-blue-marble.jpg"
   );
 
-  // Critical: set SRGB color space so the texture renders bright (not dark/linear)
   useEffect(() => {
     if (earthTexture) {
       earthTexture.colorSpace = THREE.SRGBColorSpace;
@@ -366,7 +339,6 @@ function Earth({
     if (!meshRef.current) return;
 
     if (isSpinning.current) {
-      // Multilateral spin: rotate around random axis with lateral tilt
       spinSpeed.current *= friction;
       tempQuat.setFromAxisAngle(spinAxis.current, spinSpeed.current);
       meshRef.current.quaternion.premultiply(tempQuat);
@@ -377,7 +349,6 @@ function Earth({
         onSpinComplete();
       }
     } else if (isAutoRotating.current && targetQuaternion.current) {
-      // Smoothly slerp globe quaternion to center pin toward camera
       meshRef.current.quaternion.slerp(targetQuaternion.current, 0.045);
       if (meshRef.current.quaternion.angleTo(targetQuaternion.current) < 0.005) {
         meshRef.current.quaternion.copy(targetQuaternion.current);
@@ -385,13 +356,11 @@ function Earth({
         isLanded.current = true;
       }
     } else if (!isLanded.current) {
-      // Idle: gentle Y rotation using quaternion premultiply
       tempQuat.setFromAxisAngle(idleAxisY, idleSpeed);
       meshRef.current.quaternion.premultiply(tempQuat);
     }
   });
 
-  // Animate pin scale (pop-in effect)
   useFrame(() => {
     if (pinRef.current) {
       const target = pinRef.current.visible ? 1 : 0;
@@ -405,70 +374,156 @@ function Earth({
 
   return (
     <group>
-      {/* Earth mesh with NASA Blue Marble texture -- pin is a CHILD so it rotates with the globe */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[1, 64, 64]} />
-        <meshStandardMaterial
-          map={earthTexture}
-          roughness={0.55}
-          metalness={0.02}
-        />
-        {/* Destination pin (child of mesh, rotates with globe quaternion) */}
+        <meshStandardMaterial map={earthTexture} roughness={0.55} metalness={0.02} />
         <DestinationPin pinRef={pinRef} />
       </mesh>
-
-      {/* Atmosphere glow */}
-      <mesh position={[0, 0, 0]}>
+      <mesh>
         <sphereGeometry args={[1.04, 64, 64]} />
-        <meshBasicMaterial
-          color={0x4fc3f7}
-          transparent
-          opacity={0.08}
-          side={THREE.BackSide}
-        />
+        <meshBasicMaterial color={0x4fc3f7} transparent opacity={0.08} side={THREE.BackSide} />
       </mesh>
-
-      {/* Outer atmosphere halo */}
-      <mesh position={[0, 0, 0]}>
+      <mesh>
         <sphereGeometry args={[1.1, 64, 64]} />
-        <meshBasicMaterial
-          color={0x81d4fa}
-          transparent
-          opacity={0.05}
-          side={THREE.BackSide}
-        />
+        <meshBasicMaterial color={0x81d4fa} transparent opacity={0.05} side={THREE.BackSide} />
       </mesh>
     </group>
   );
 }
 
-// ---- Trip card overlay with genie effect (unified for all screen sizes) ----
-function TripCard({
+// ---- Card content shared by both layouts ----
+function CardBody({
+  destination,
+  isMobile,
+}: {
+  destination: NonNullable<GlobeDestination>;
+  isMobile: boolean;
+}) {
+  const imgH = isMobile ? 160 : 140;
+
+  return (
+    <>
+      {/* Destination image */}
+      <div style={{ position: "relative", width: "100%", height: imgH, overflow: "hidden" }}>
+        <img
+          src={destination.image}
+          alt={destination.name}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
+          background: "linear-gradient(transparent, rgba(0,0,0,0.5))",
+        }} />
+        <span style={{
+          position: "absolute", top: 10, right: 10,
+          background: "#0D7377", color: "white",
+          fontSize: isMobile ? 12 : 11, fontWeight: 600,
+          padding: "3px 10px", borderRadius: 20,
+        }}>
+          {destination.days} nights
+        </span>
+        <div style={{ position: "absolute", bottom: 10, left: 14, right: 14 }}>
+          <p style={{ fontSize: isMobile ? 11 : 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
+            Your Destination
+          </p>
+          <h3 style={{ fontSize: isMobile ? 22 : 20, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
+            {destination.name}
+          </h3>
+        </div>
+      </div>
+
+      {/* Card body */}
+      <div style={{ padding: isMobile ? "16px 16px 20px" : "14px 16px 16px" }}>
+        {/* Trip theme */}
+        <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: "#FFF5F0" }}>
+          <p style={{ fontSize: 11, color: "#999", marginBottom: 2 }}>Trip Theme</p>
+          <p style={{ fontSize: isMobile ? 15 : 14, fontWeight: 600, color: "#2D3436" }}>
+            {destination.theme}
+          </p>
+        </div>
+
+        {/* Climate and cost row */}
+        <div style={{ display: "flex", gap: 8, marginBottom: isMobile ? 14 : 12 }}>
+          <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#F0FAFA" }}>
+            <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Climate</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
+            <p style={{ fontSize: 11, color: "#666" }}>{destination.tempRange}</p>
+          </div>
+          <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#FFF8F5" }}>
+            <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
+            <p style={{ fontSize: 11, color: "#666" }}>Flights + hotel + activities</p>
+          </div>
+        </div>
+
+        {/* Package includes */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: isMobile ? 16 : 14 }}>
+          {[
+            { icon: "\u2708\uFE0F", label: "Flights" },
+            { icon: "\uD83C\uDFE8", label: "Hotel" },
+            { icon: "\uD83C\uDFAF", label: "Activities" },
+            { icon: "\uD83D\uDE97", label: "Transport" },
+          ].map((item) => (
+            <span
+              key={item.label}
+              style={{
+                fontSize: isMobile ? 12 : 11, color: "#666", background: "#f5f5f3",
+                padding: "3px 8px", borderRadius: 6, display: "inline-flex",
+                alignItems: "center", gap: 4,
+              }}
+            >
+              <span style={{ fontSize: isMobile ? 14 : 13 }}>{item.icon}</span>
+              {item.label}
+            </span>
+          ))}
+        </div>
+
+        {/* CTA buttons */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={{
+            flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
+            padding: isMobile ? "12px 0" : "10px 0", borderRadius: 12,
+            fontSize: isMobile ? 15 : 13, border: "none", cursor: "pointer",
+          }}>
+            Book This Trip
+          </button>
+          <button style={{
+            padding: isMobile ? "12px 18px" : "10px 16px",
+            border: "1px solid #e0e0e0", color: "#666",
+            borderRadius: 12, fontSize: isMobile ? 15 : 13,
+            background: "white", cursor: "pointer",
+          }}>
+            Details
+          </button>
+        </div>
+
+        <p style={{ fontSize: 11, color: "#bbb", textAlign: "center", marginTop: 8 }}>
+          Demo preview. Real trips coming soon.
+        </p>
+      </div>
+    </>
+  );
+}
+
+// ---- DESKTOP: Trip card with genie effect from pin bottom-left ----
+function DesktopTripCard({
   destination,
   pinScreenPos,
   isVisible,
-  onDismiss,
-  isMobile,
 }: {
   destination: GlobeDestination;
   pinScreenPos: { x: number; y: number } | null;
   isVisible: boolean;
-  onDismiss: () => void;
-  isMobile: boolean;
 }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  // track the genie animation progress (0 = fully in pin, 1 = fully expanded)
   const [genieProgress, setGenieProgress] = useState(0);
   const animFrameRef = useRef<number>(0);
-
-  // Animate genie progress smoothly
   const targetProgress = useRef(0);
+
   useEffect(() => {
     const animate = () => {
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
         if (Math.abs(diff) < 0.005) return targetProgress.current;
-        // Ease out cubic for smooth genie feel
         return prev + diff * 0.12;
       });
       animFrameRef.current = requestAnimationFrame(animate);
@@ -477,22 +532,15 @@ function TripCard({
     return () => cancelAnimationFrame(animFrameRef.current);
   }, []);
 
-  // Determine target: show or collapse based on visibility and scroll
   useEffect(() => {
     if (!isVisible) {
       targetProgress.current = 0;
       return;
     }
-
-    // Card just became visible: expand it
     targetProgress.current = 1;
 
     const handleScroll = () => {
-      if (window.scrollY > 5) {
-        targetProgress.current = 0;
-      } else {
-        targetProgress.current = 1;
-      }
+      targetProgress.current = window.scrollY > 5 ? 0 : 1;
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -501,205 +549,167 @@ function TripCard({
 
   if (!destination || !pinScreenPos) return null;
 
-  // Responsive card width
-  const cardW = isMobile ? Math.min(300, window.innerWidth - 24) : 340;
-  const imgH = isMobile ? 110 : 140;
-
-  // Position: bottom-left corner of card anchored exactly at pin head
+  const cardW = 340;
   let cardLeft = pinScreenPos.x;
-  let cardTop = pinScreenPos.y;
+  const cardTop = pinScreenPos.y;
 
-  // Keep card within viewport
   if (typeof window !== "undefined") {
     const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    // Horizontal clamping
-    if (cardLeft + cardW > vw - 8) cardLeft = vw - cardW - 8;
-    if (cardLeft < 8) cardLeft = 8;
-
-    // On mobile, if the card would go above the viewport (pin is too high),
-    // flip it below the pin instead of above
-    if (isMobile && cardTop < 80) {
-      // Card will render below the pin instead
-      cardTop = pinScreenPos.y + 12;
-    }
+    if (cardLeft + cardW > vw - 12) cardLeft = vw - cardW - 12;
+    if (cardLeft < 12) cardLeft = 12;
   }
 
-  // Genie effect: scale from 0 at bottom-left corner, with slight vertical squash
   const p = genieProgress;
   const scale = p;
-  const opacity = Math.min(p * 2, 1); // fade in faster than scale
-  const skewX = (1 - p) * -4; // slight skew that resolves as card expands
-  const scaleY = 0.6 + p * 0.4; // vertical stretch: starts squished, ends normal
-
-  // Determine if card should render below pin (flipped) on mobile
-  const isFlipped = isMobile && pinScreenPos.y < 80;
-  const transformOrigin = isFlipped ? "top left" : "bottom left";
-  const translateY = isFlipped ? "0%" : "-100%";
-
+  const opacity = Math.min(p * 2, 1);
+  const skewX = (1 - p) * -4;
+  const scaleY = 0.6 + p * 0.4;
   const isShowing = p > 0.01;
+
+  return isShowing ? (
+    <div
+      style={{
+        position: "fixed",
+        left: `${cardLeft}px`,
+        top: `${cardTop}px`,
+        width: `${cardW}px`,
+        zIndex: 50,
+        transformOrigin: "bottom left",
+        transform: `translateY(-100%) scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
+        opacity,
+        pointerEvents: p > 0.8 ? "auto" : "none",
+        willChange: "transform, opacity",
+      }}
+    >
+      <div
+        className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden"
+        style={{
+          background: "rgba(255,255,255,0.97)",
+          boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
+        }}
+      >
+        <CardBody destination={destination} isMobile={false} />
+        {/* Triangle pointer toward pin */}
+        <div
+          style={{
+            position: "absolute", bottom: -8, left: 8,
+            width: 0, height: 0,
+            borderLeft: "8px solid transparent",
+            borderRight: "8px solid transparent",
+            borderTop: "8px solid rgba(255,255,255,0.97)",
+            filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
+          }}
+        />
+      </div>
+    </div>
+  ) : null;
+}
+
+// ---- MOBILE: Full-screen modal card with center-origin genie ----
+// Fills from just below the navbar to the bottom, with the globe/pin
+// visible behind a semi-transparent backdrop. Genie origin = center of card.
+function MobileTripCard({
+  destination,
+  pinScreenPos,
+  isVisible,
+  onDismiss,
+}: {
+  destination: GlobeDestination;
+  pinScreenPos: { x: number; y: number } | null;
+  isVisible: boolean;
+  onDismiss: () => void;
+}) {
+  const [genieProgress, setGenieProgress] = useState(0);
+  const animFrameRef = useRef<number>(0);
+  const targetProgress = useRef(0);
+
+  useEffect(() => {
+    const animate = () => {
+      setGenieProgress((prev) => {
+        const diff = targetProgress.current - prev;
+        if (Math.abs(diff) < 0.005) return targetProgress.current;
+        return prev + diff * 0.12;
+      });
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible) {
+      targetProgress.current = 0;
+      return;
+    }
+    targetProgress.current = 1;
+
+    const handleScroll = () => {
+      targetProgress.current = window.scrollY > 5 ? 0 : 1;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isVisible]);
+
+  if (!destination || !pinScreenPos) return null;
+
+  const p = genieProgress;
+  const isShowing = p > 0.01;
+
+  // Navbar is ~64px. Card sits from 72px top to bottom with 12px margins
+  const topOffset = 72;
+  const margin = 12;
+
+  // Genie effect: scale from center, vertical squash, slight vertical skew
+  const scale = p;
+  const opacity = Math.min(p * 2, 1);
+  const scaleY = 0.7 + p * 0.3;
 
   return (
     <>
+      {/* Semi-transparent backdrop so globe/pin are visible behind */}
       {isShowing && (
         <div
-          ref={cardRef}
           style={{
             position: "fixed",
-            left: `${cardLeft}px`,
-            top: `${cardTop}px`,
-            width: `${cardW}px`,
+            inset: 0,
+            zIndex: 49,
+            background: `rgba(0,0,0,${0.25 * p})`,
+            pointerEvents: p > 0.5 ? "auto" : "none",
+          }}
+          onClick={onDismiss}
+        />
+      )}
+
+      {isShowing && (
+        <div
+          style={{
+            position: "fixed",
+            top: `${topOffset}px`,
+            left: `${margin}px`,
+            right: `${margin}px`,
+            bottom: `${margin}px`,
             zIndex: 50,
-            transformOrigin,
-            // translateY(-100%) shifts card up by its own height so bottom-left = pin head
-            transform: `translateY(${translateY}) scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
+            transformOrigin: "center center",
+            transform: `scale(${scale}) scaleY(${scaleY})`,
             opacity,
             pointerEvents: p > 0.8 ? "auto" : "none",
             willChange: "transform, opacity",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
           <div
-            className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden"
+            className="rounded-2xl border border-teal-100/30 relative overflow-hidden flex-1 flex flex-col"
             style={{
               background: "rgba(255,255,255,0.97)",
-              boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
+              boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.2 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
             }}
           >
-            {/* Destination image */}
-            <div style={{ position: "relative", width: "100%", height: imgH, overflow: "hidden" }}>
-              <img
-                src={destination.image}
-                alt={destination.name}
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-              />
-              {/* Gradient overlay for text readability */}
-              <div style={{
-                position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
-                background: "linear-gradient(transparent, rgba(0,0,0,0.5))",
-              }} />
-              {/* Nights badge on image */}
-              <span style={{
-                position: "absolute", top: 8, right: 8,
-                background: "#0D7377", color: "white",
-                fontSize: isMobile ? 10 : 11, fontWeight: 600,
-                padding: "2px 8px", borderRadius: 20,
-              }}>
-                {destination.days} nights
-              </span>
-              {/* Destination name on image */}
-              <div style={{ position: "absolute", bottom: 8, left: 12, right: 12 }}>
-                <p style={{ fontSize: isMobile ? 10 : 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
-                  Your Destination
-                </p>
-                <h3 style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
-                  {destination.name}
-                </h3>
-              </div>
+            {/* Scrollable content area */}
+            <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+              <CardBody destination={destination} isMobile={true} />
             </div>
-
-            {/* Card body */}
-            <div style={{ padding: isMobile ? "10px 12px 12px" : "14px 16px 16px" }}>
-              {/* Trip theme */}
-              <div className="rounded-lg px-3 py-2 mb-2" style={{ background: "#FFF5F0" }}>
-                <p style={{ fontSize: isMobile ? 10 : 11, color: "#999", marginBottom: 1 }}>Trip Theme</p>
-                <p style={{ fontSize: isMobile ? 13 : 14, fontWeight: 600, color: "#2D3436" }}>
-                  {destination.theme}
-                </p>
-              </div>
-
-              {/* Climate and cost row */}
-              <div style={{ display: "flex", gap: 6, marginBottom: isMobile ? 8 : 12 }}>
-                <div className="rounded-lg px-2.5 py-1.5" style={{ flex: 1, background: "#F0FAFA" }}>
-                  <p style={{ fontSize: isMobile ? 9 : 10, color: "#999", marginBottom: 1 }}>Climate</p>
-                  <p style={{ fontSize: isMobile ? 11 : 12, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
-                  <p style={{ fontSize: isMobile ? 10 : 11, color: "#666" }}>{destination.tempRange}</p>
-                </div>
-                <div className="rounded-lg px-2.5 py-1.5" style={{ flex: 1, background: "#FFF8F5" }}>
-                  <p style={{ fontSize: isMobile ? 9 : 10, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
-                  <p style={{ fontSize: isMobile ? 11 : 12, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
-                  <p style={{ fontSize: isMobile ? 10 : 11, color: "#666" }}>Flights + hotel + activities</p>
-                </div>
-              </div>
-
-              {/* Package includes (compact) */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 4 : 6, marginBottom: isMobile ? 10 : 14 }}>
-                {[
-                  { icon: "\u2708\uFE0F", label: "Flights" },
-                  { icon: "\uD83C\uDFE8", label: "Hotel" },
-                  { icon: "\uD83C\uDFAF", label: "Activities" },
-                  { icon: "\uD83D\uDE97", label: "Transport" },
-                ].map((item) => (
-                  <span
-                    key={item.label}
-                    style={{
-                      fontSize: isMobile ? 10 : 11, color: "#666", background: "#f5f5f3",
-                      padding: isMobile ? "2px 6px" : "3px 8px", borderRadius: 6, display: "inline-flex",
-                      alignItems: "center", gap: 3,
-                    }}
-                  >
-                    <span style={{ fontSize: isMobile ? 11 : 13 }}>{item.icon}</span>
-                    {item.label}
-                  </span>
-                ))}
-              </div>
-
-              {/* CTA buttons */}
-              <div style={{ display: "flex", gap: 6 }}>
-                <button style={{
-                  flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
-                  padding: isMobile ? "8px 0" : "10px 0", borderRadius: 12,
-                  fontSize: isMobile ? 12 : 13, border: "none", cursor: "pointer",
-                }}>
-                  Book This Trip
-                </button>
-                <button style={{
-                  padding: isMobile ? "8px 12px" : "10px 16px",
-                  border: "1px solid #e0e0e0", color: "#666",
-                  borderRadius: 12, fontSize: isMobile ? 12 : 13,
-                  background: "white", cursor: "pointer",
-                }}>
-                  Details
-                </button>
-              </div>
-
-              <p style={{ fontSize: isMobile ? 10 : 11, color: "#bbb", textAlign: "center", marginTop: 6 }}>
-                Demo preview. Real trips coming soon.
-              </p>
-            </div>
-
-            {/* Small triangle pointer at bottom-left pointing down toward pin */}
-            {!isFlipped && (
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: -8,
-                  left: 8,
-                  width: 0,
-                  height: 0,
-                  borderLeft: "8px solid transparent",
-                  borderRight: "8px solid transparent",
-                  borderTop: "8px solid rgba(255,255,255,0.97)",
-                  filter: "drop-shadow(0 2px 2px rgba(0,0,0,0.08))",
-                }}
-              />
-            )}
-            {/* Arrow pointing up when card is flipped below pin */}
-            {isFlipped && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: -8,
-                  left: 8,
-                  width: 0,
-                  height: 0,
-                  borderLeft: "8px solid transparent",
-                  borderRight: "8px solid transparent",
-                  borderBottom: "8px solid rgba(255,255,255,0.97)",
-                  filter: "drop-shadow(0 -2px 2px rgba(0,0,0,0.08))",
-                }}
-              />
-            )}
           </div>
         </div>
       )}
@@ -715,7 +725,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
   const [cardPosition, setCardPosition] = useState<{ x: number; y: number } | null>(null);
   const isMobile = useIsMobile();
 
-  // Mutable refs for animation state
   const spinSpeed = useRef(0);
   const spinAxis = useRef(new THREE.Vector3(0, 1, 0));
   const targetQuaternion = useRef<THREE.Quaternion | null>(null);
@@ -745,7 +754,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
     pinRef.current!.visible = false;
     pinRef.current!.scale.set(0, 0, 0);
 
-    // Random spin axis with lateral tilt for multilateral movement
     spinAxis.current = new THREE.Vector3(
       (Math.random() - 0.5) * 0.6,
       1,
@@ -766,7 +774,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
     destination.current = dest;
 
     if (pinRef.current && cameraRef.current) {
-      // Position pin at destination coordinates
       const phi = (90 - dest.lat) * (Math.PI / 180);
       const theta = (dest.lng + 180) * (Math.PI / 180);
       const r = 1.03;
@@ -775,7 +782,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
       const pz = r * Math.sin(phi) * Math.sin(theta);
       pinRef.current.position.set(px, py, pz);
 
-      // Orient pin to stick radially outward from globe
       const normal = new THREE.Vector3(px, py, pz).normalize();
       const defaultUp = new THREE.Vector3(0, 1, 0);
       pinRef.current.quaternion.setFromUnitVectors(defaultUp, normal);
@@ -783,8 +789,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
       pinRef.current.visible = true;
       pinRef.current.scale.set(0, 0, 0);
 
-      // Compute target quaternion to center pin toward camera
-      // Pin is now a child of globeRef (the mesh), so use globeRef quaternion
       const globeMesh = globeRef.current!;
       const worldDest = normal.clone().applyQuaternion(globeMesh.quaternion);
       const cameraDir = new THREE.Vector3(0, 0, 1);
@@ -792,7 +796,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
       targetQuaternion.current = rotateToFace.multiply(globeMesh.quaternion.clone());
       isAutoRotatingRef.current = true;
 
-      // Show card after auto-rotate settles
       setTimeout(() => {
         setShowCard(true);
       }, 600);
@@ -814,11 +817,11 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
   return (
     <div className="relative w-full h-full">
       <Canvas
-        camera={{ position: [0, 0, isMobile ? 3.5 : 3], fov: isMobile ? 50 : 45 }}
+        camera={{ position: [0, 0, isMobile ? 3.15 : 3], fov: 45 }}
         className="globe-canvas"
         style={{
           background: "transparent",
-          touchAction: "pan-y",  // Allow vertical scroll to pass through canvas
+          touchAction: "pan-y",
         }}
       >
         <CameraCapture cameraRef={cameraRef} />
@@ -858,14 +861,21 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
         />
       </Canvas>
 
-      {/* Trip card overlay - same genie effect on all screen sizes */}
-      <TripCard
-        destination={destination.current}
-        pinScreenPos={cardPosition}
-        isVisible={showCard}
-        onDismiss={handleDismissCard}
-        isMobile={isMobile}
-      />
+      {/* Trip card: desktop pin-anchored genie vs mobile full-screen modal genie */}
+      {isMobile ? (
+        <MobileTripCard
+          destination={destination.current}
+          pinScreenPos={cardPosition}
+          isVisible={showCard}
+          onDismiss={handleDismissCard}
+        />
+      ) : (
+        <DesktopTripCard
+          destination={destination.current}
+          pinScreenPos={cardPosition}
+          isVisible={showCard}
+        />
+      )}
 
       {/* Spin button overlay */}
       <div className={`absolute left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 sm:gap-3 ${isMobile ? "bottom-3" : "bottom-8"}`}>

@@ -69,7 +69,7 @@ export default function Home() {
           </div>
 
           {/* Right: Globe (card is rendered internally, positioned relative to pin) */}
-          <div className="relative h-[350px] sm:h-[550px] lg:h-[600px]">
+          <div className="relative h-[440px] sm:h-[550px] lg:h-[600px]">
             <Globe onDestinationRevealed={handleDestinationRevealed} />
           </div>
         </div>

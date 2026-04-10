@@ -512,14 +512,17 @@ function DesktopTripCard({
   const [genieProgress, setGenieProgress] = useState(0);
   const animFrameRef = useRef<number>(0);
   const targetProgress = useRef(0);
+  const lastScrollY = useRef(0);
+  const collapseAnchor = useRef(0);
+  const expandAnchor = useRef(0);
+  const scrollDir = useRef<"down" | "up">("down");
 
   useEffect(() => {
     const animate = () => {
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
         if (Math.abs(diff) < 0.003) return targetProgress.current;
-        // Slower, smoother easing
-        return prev + diff * 0.06;
+        return prev + diff * 0.1;
       });
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -533,10 +536,38 @@ function DesktopTripCard({
       return;
     }
     targetProgress.current = 1;
+    lastScrollY.current = window.scrollY;
+    collapseAnchor.current = window.scrollY;
+    expandAnchor.current = window.scrollY;
+    scrollDir.current = "down";
+
+    const scrollRange = 250;
 
     const handleScroll = () => {
-      const scrollRange = 150;
-      targetProgress.current = Math.max(0, 1 - window.scrollY / scrollRange);
+      const sy = window.scrollY;
+      const newDir = sy > lastScrollY.current ? "down" : "up";
+
+      // When direction changes, set new anchor at current position
+      if (newDir !== scrollDir.current) {
+        if (newDir === "down") {
+          collapseAnchor.current = sy;
+        } else {
+          expandAnchor.current = sy;
+        }
+        scrollDir.current = newDir;
+      }
+
+      if (newDir === "down") {
+        // Scrolling down: collapse from current anchor
+        const dist = sy - collapseAnchor.current;
+        targetProgress.current = Math.max(0, 1 - dist / scrollRange);
+      } else {
+        // Scrolling up: expand from current anchor
+        const dist = expandAnchor.current - sy;
+        targetProgress.current = Math.min(1, dist / scrollRange);
+      }
+
+      lastScrollY.current = sy;
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -623,14 +654,17 @@ function MobileTripCard({
   const [genieProgress, setGenieProgress] = useState(0);
   const animFrameRef = useRef<number>(0);
   const targetProgress = useRef(0);
+  const lastScrollY = useRef(0);
+  const collapseAnchor = useRef(0);
+  const expandAnchor = useRef(0);
+  const scrollDir = useRef<"down" | "up">("down");
 
   useEffect(() => {
     const animate = () => {
       setGenieProgress((prev) => {
         const diff = targetProgress.current - prev;
         if (Math.abs(diff) < 0.003) return targetProgress.current;
-        // Slower, smoother genie feel
-        return prev + diff * 0.06;
+        return prev + diff * 0.1;
       });
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -644,10 +678,35 @@ function MobileTripCard({
       return;
     }
     targetProgress.current = 1;
+    lastScrollY.current = window.scrollY;
+    collapseAnchor.current = window.scrollY;
+    expandAnchor.current = window.scrollY;
+    scrollDir.current = "down";
+
+    const scrollRange = 250;
 
     const handleScroll = () => {
-      const scrollRange = 150;
-      targetProgress.current = Math.max(0, 1 - window.scrollY / scrollRange);
+      const sy = window.scrollY;
+      const newDir = sy > lastScrollY.current ? "down" : "up";
+
+      if (newDir !== scrollDir.current) {
+        if (newDir === "down") {
+          collapseAnchor.current = sy;
+        } else {
+          expandAnchor.current = sy;
+        }
+        scrollDir.current = newDir;
+      }
+
+      if (newDir === "down") {
+        const dist = sy - collapseAnchor.current;
+        targetProgress.current = Math.max(0, 1 - dist / scrollRange);
+      } else {
+        const dist = expandAnchor.current - sy;
+        targetProgress.current = Math.min(1, dist / scrollRange);
+      }
+
+      lastScrollY.current = sy;
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });

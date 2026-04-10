@@ -606,7 +606,7 @@ function DesktopTripCard({
         left: `${finalLeft}px`,
         top: `${pinScreenPos.y}px`,
         width: `${cardW}px`,
-        zIndex: 50,
+        zIndex: 60,
         transformOrigin: "bottom left",
         transform: `translateY(-100%) scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
         opacity,
@@ -758,7 +758,7 @@ function MobileTripCard({
           style={{
             position: "fixed",
             inset: 0,
-            zIndex: 49,
+            zIndex: 59,
             background: `rgba(0,0,0,${0.25 * p})`,
             pointerEvents: rawP > 0.5 ? "auto" : "none",
           }}
@@ -774,7 +774,7 @@ function MobileTripCard({
             top: `${top}px`,
             width: `${finalW}px`,
             height: `${finalH}px`,
-            zIndex: 50,
+            zIndex: 60,
             transformOrigin: "center center",
             transform: `scale(${scale}) scaleY(${scaleY})`,
             opacity,

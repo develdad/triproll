@@ -58,6 +58,12 @@ export default function DashboardLayout({
             >
               Travel DNA
             </Link>
+            <Link
+              href="/travel-dna/results"
+              className="block px-4 py-3 rounded-lg text-slate hover:bg-cloud transition-colors pl-8 text-sm"
+            >
+              View Results
+            </Link>
           </nav>
 
           {/* User Actions */}

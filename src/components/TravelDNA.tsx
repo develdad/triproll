@@ -18,6 +18,8 @@ export default function TravelDNA() {
     energy: 0,
   });
   const [isComplete, setIsComplete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const question = TRAVEL_DNA_QUESTIONS[currentQuestion];
   const progress = ((currentQuestion + 1) / TRAVEL_DNA_QUESTIONS.length) * 100;
@@ -119,26 +121,38 @@ export default function TravelDNA() {
                 </div>
               </div>
 
+              {/* Error message */}
+              {saveError && (
+                <div className="mb-4 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  {saveError}
+                </div>
+              )}
+
               {/* CTA */}
               <button
+                disabled={isSaving}
                 onClick={async () => {
-                  // Persist to database via server action
-                  const result = await saveTravelDNA({ ...axes, archetype });
-                  // Also store in session storage as fallback
-                  sessionStorage.setItem(
-                    "travelDNA",
-                    JSON.stringify({
-                      id: result.data?.id,
-                      axes,
-                      archetype,
-                      completedAt: new Date().toISOString(),
-                    })
-                  );
-                  router.push("/trip/new");
+                  setIsSaving(true);
+                  setSaveError(null);
+
+                  try {
+                    const result = await saveTravelDNA({ ...axes, archetype });
+
+                    if (result.error) {
+                      setSaveError(result.error);
+                      setIsSaving(false);
+                      return;
+                    }
+
+                    router.push("/travel-dna/results");
+                  } catch {
+                    setSaveError("Something went wrong. Please try again.");
+                    setIsSaving(false);
+                  }
                 }}
-                className="bg-teal-deep hover:bg-ocean text-white font-semibold px-8 py-3 rounded-full transition-colors inline-block"
+                className="bg-teal-deep hover:bg-ocean disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold px-8 py-3 rounded-full transition-colors inline-block"
               >
-                Continue to Trip Details
+                {isSaving ? "Saving..." : "See Your Results"}
               </button>
             </div>
           </div>

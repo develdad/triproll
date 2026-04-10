@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUDGET_RANGES, COMMON_DEPARTING_CITIES, CONSTRAINTS_OPTIONS } from "@/lib/constants";
-import type { TripRequest } from "@/lib/types";
+import type { TripRequest, TravelMode } from "@/lib/types";
 import { saveTripRequest, getActiveTravelDNA, generateTrip } from "@/app/actions";
 
 export default function TripQuestionnaire() {
@@ -19,6 +19,7 @@ export default function TripQuestionnaire() {
     partySize: 1,
     partyType: "solo",
     departureCity: "",
+    travelMode: "flights-included" as TravelMode,
     constraints: {
       dietary: [],
       mobility: [],
@@ -34,6 +35,7 @@ export default function TripQuestionnaire() {
     { title: "Budget", icon: "💰" },
     { title: "Travel Party", icon: "👥" },
     { title: "Departure City", icon: "✈️" },
+    { title: "Getting There", icon: "🛣️" },
     { title: "Constraints", icon: "🚫" },
     { title: "Review", icon: "✅" },
   ];
@@ -122,6 +124,7 @@ export default function TripQuestionnaire() {
         constraintsMobility: formData.constraints.mobility,
         constraintsPassport: formData.constraints.passport,
         constraintsOther: formData.constraints.other,
+        travelMode: formData.travelMode,
         mode: "commitment",
       });
 
@@ -350,8 +353,63 @@ export default function TripQuestionnaire() {
             </div>
           )}
 
-          {/* Step 5: Constraints */}
+          {/* Step 5: Getting There */}
           {step === 4 && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold text-charcoal mb-2">How would you like to get there?</h2>
+              <p className="text-slate text-sm mb-6">This shapes which destinations we can match you with and what we include in your package.</p>
+
+              <div className="space-y-3">
+                {([
+                  {
+                    mode: "flights-included" as TravelMode,
+                    label: "Book my flights",
+                    description: "We handle everything, including round-trip airfare to your destination.",
+                    icon: "✈️",
+                  },
+                  {
+                    mode: "arrange-own-flights" as TravelMode,
+                    label: "I'll arrange my own flights",
+                    description: "We plan your destination, accommodation, and activities. You book your own travel to get there.",
+                    icon: "🎫",
+                  },
+                  {
+                    mode: "road-trip" as TravelMode,
+                    label: "Road trip",
+                    description: "We find a drivable destination and plan everything on the ground. You hit the road.",
+                    icon: "🚗",
+                  },
+                ]).map((option) => (
+                  <button
+                    key={option.mode}
+                    onClick={() => setFormData((prev) => ({ ...prev, travelMode: option.mode }))}
+                    className={`w-full p-5 rounded-lg border-2 transition-all text-left ${
+                      formData.travelMode === option.mode
+                        ? "border-teal-deep bg-teal-light/20"
+                        : "border-silver/30 hover:border-teal-light"
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <span className="text-2xl mt-0.5">{option.icon}</span>
+                      <div>
+                        <div className="font-semibold text-charcoal">{option.label}</div>
+                        <div className="text-sm text-slate mt-1">{option.description}</div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {formData.travelMode === "road-trip" && (
+                <div className="p-3 rounded-lg bg-cloud border border-silver/20 text-sm text-slate">
+                  Destinations will be limited to places within driving distance of {formData.departureCity || "your departure city"}, scaled to your trip length.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 6: Constraints */}
+          {step === 5 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-semibold text-charcoal mb-6">Any constraints we should know about?</h2>
 
@@ -405,8 +463,8 @@ export default function TripQuestionnaire() {
             </div>
           )}
 
-          {/* Step 6: Review */}
-          {step === 5 && (
+          {/* Step 7: Review */}
+          {step === 6 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-semibold text-charcoal mb-6">Review Your Details</h2>
 
@@ -435,6 +493,15 @@ export default function TripQuestionnaire() {
                 <div className="p-4 rounded-lg bg-cloud">
                   <div className="text-sm text-slate mb-1">Departure City</div>
                   <div className="font-semibold text-charcoal">{formData.departureCity}</div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-cloud">
+                  <div className="text-sm text-slate mb-1">Getting There</div>
+                  <div className="font-semibold text-charcoal">
+                    {formData.travelMode === "flights-included" && "Flights included in package"}
+                    {formData.travelMode === "arrange-own-flights" && "Arranging own flights"}
+                    {formData.travelMode === "road-trip" && "Road trip (driving)"}
+                  </div>
                 </div>
 
                 {(formData.constraints.dietary.length > 0 ||

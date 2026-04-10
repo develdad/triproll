@@ -65,6 +65,7 @@ export async function saveTripRequest(data: {
   constraintsMobility: string[];
   constraintsPassport: string[];
   constraintsOther: string;
+  travelMode: string;
   mode: string;
 }) {
   const supabase = await createClient();
@@ -86,6 +87,7 @@ export async function saveTripRequest(data: {
       party_size: data.partySize,
       party_type: data.partyType,
       departure_city: data.departureCity,
+      travel_mode: data.travelMode,
       constraints_dietary: data.constraintsDietary,
       constraints_mobility: data.constraintsMobility,
       constraints_passport: data.constraintsPassport,
@@ -202,149 +204,215 @@ export async function generateTrip(tripRequestId: string) {
     .eq("is_active", true)
     .single();
 
-  // Import destinations from constants (server-side)
-  const { SAMPLE_DESTINATIONS } = await import("@/lib/constants");
+  // Import destinations and helpers from constants (server-side)
+  const { ALL_DESTINATIONS, SAMPLE_DESTINATIONS, DOMESTIC_DESTINATIONS, DEPARTURE_CITY_COORDS } = await import("@/lib/constants");
 
-  // ---- Travel time estimation ----
-  // Rough one-way travel hours from major US cities to destination regions.
-  // Includes airport time, layovers, and transit. These are conservative estimates.
-  const TRAVEL_HOURS: Record<string, number> = {
+  // ---- Helpers ----
+  const travelMode = tripRequest.travel_mode || "flights-included";
+  const TRAVEL_RATIO_MAX = 0.33; // Max 33% of trip spent traveling
+
+  // One-way flight hours by region (from continental US, conservative estimates)
+  const FLIGHT_HOURS: Record<string, number> = {
     "Asia": 20,
     "Oceania": 22,
     "Europe": 12,
     "Africa": 18,
     "South America": 12,
     "Middle East": 18,
+    "Domestic": 4,
   };
 
-  // Calculate trip length in days
+  // Haversine distance in miles between two lat/lng points
+  function haversineMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 3959; // Earth radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // Estimate driving hours from straight-line distance (1.3x road factor, 55mph avg)
+  function estimateDriveHours(miles: number): number {
+    const roadMiles = miles * 1.3;
+    return roadMiles / 55;
+  }
+
+  // Get departure city coordinates (fall back to geographic center of US)
+  const departureCoords = DEPARTURE_CITY_COORDS[tripRequest.departure_city]
+    ?? { lat: 39.8283, lng: -98.5795 };
+
+  // Trip duration in total hours
   const tripDays = Math.max(1, Math.ceil(
     (new Date(tripRequest.return_date).getTime() - new Date(tripRequest.departure_date).getTime()) / (1000 * 60 * 60 * 24)
   ));
+  const tripHours = tripDays * 24;
+  const maxOneWayTravelHours = (tripHours * TRAVEL_RATIO_MAX) / 2; // 33% total = 16.5% each way
 
-  // Filter destinations by travel feasibility.
-  // Rule: one-way travel time (in days, rounded up) should be at most 25% of the total trip.
-  // E.g., a 20-hour flight = ~1 travel day each way = 2 travel days total.
-  // For a 4-day trip, 2 travel days = 50% -> not feasible.
-  // For an 8-day trip, 2 travel days = 25% -> feasible.
-  const feasibleDestinations = SAMPLE_DESTINATIONS.filter((dest) => {
-    const oneWayHours = TRAVEL_HOURS[dest.region] ?? 6; // Default: domestic/nearby
-    const totalTravelDays = Math.ceil(oneWayHours / 12) * 2; // Round up to half-days, both ways
-    const travelRatio = totalTravelDays / tripDays;
-    return travelRatio <= 0.25;
-  });
+  // ---- Build candidate pool based on travel mode ----
+  type DestWithTravel = typeof ALL_DESTINATIONS[number] & {
+    oneWayHours: number;
+    travelMode: string;
+  };
 
-  // If no destinations pass the filter (very short trip), fall back to all
-  // but apply a heavy penalty for long travel times
-  const candidateDestinations = feasibleDestinations.length >= 2
-    ? feasibleDestinations
-    : SAMPLE_DESTINATIONS;
+  let candidates: DestWithTravel[] = [];
 
-  // Score each destination based on DNA + budget fit + travel feasibility
-  type ScoredDest = typeof SAMPLE_DESTINATIONS[number] & { score: number };
-  const scored: ScoredDest[] = candidateDestinations.map((dest) => {
+  if (travelMode === "road-trip") {
+    // Road trip: only domestic destinations within drive-time budget
+    candidates = DOMESTIC_DESTINATIONS
+      .map((dest) => {
+        const miles = haversineMiles(departureCoords.lat, departureCoords.lng, dest.lat, dest.lng);
+        const driveHours = estimateDriveHours(miles);
+        return { ...dest, oneWayHours: driveHours, travelMode: "drive" };
+      })
+      .filter((d) => d.oneWayHours <= maxOneWayTravelHours);
+  } else if (travelMode === "arrange-own-flights") {
+    // User books own flights: all destinations, but still apply 33% feasibility
+    // based on flight time so we don't suggest Bali for a 3-day trip
+    candidates = ALL_DESTINATIONS
+      .map((dest) => {
+        const flightHours = FLIGHT_HOURS[dest.region] ?? 6;
+        return { ...dest, oneWayHours: flightHours, travelMode: "own-flights" };
+      })
+      .filter((d) => d.oneWayHours <= maxOneWayTravelHours);
+  } else {
+    // Flights included: all destinations within 33% flight-time budget
+    candidates = ALL_DESTINATIONS
+      .map((dest) => {
+        const flightHours = FLIGHT_HOURS[dest.region] ?? 6;
+        return { ...dest, oneWayHours: flightHours, travelMode: "flights" };
+      })
+      .filter((d) => d.oneWayHours <= maxOneWayTravelHours);
+  }
+
+  // Fallback: if no candidates pass the filter (very short trip), use domestic only
+  if (candidates.length < 2) {
+    candidates = DOMESTIC_DESTINATIONS.map((dest) => {
+      const miles = haversineMiles(departureCoords.lat, departureCoords.lng, dest.lat, dest.lng);
+      const driveHours = estimateDriveHours(miles);
+      const flightHours = FLIGHT_HOURS[dest.region] ?? 4;
+      const oneWayHours = travelMode === "road-trip" ? driveHours : flightHours;
+      return { ...dest, oneWayHours, travelMode: travelMode === "road-trip" ? "drive" : "flights" };
+    });
+  }
+
+  // ---- Score each candidate ----
+  type ScoredDest = DestWithTravel & { score: number };
+  const scored: ScoredDest[] = candidates.map((dest) => {
     let score = 0;
 
-    // Budget fit: prefer destinations within the user's budget range
+    // Budget fit (max 30 points)
     const budgetMid = (tripRequest.budget_min + tripRequest.budget_max) / 2;
     const budgetDiff = Math.abs(dest.avgPrice - budgetMid);
     const budgetRange = tripRequest.budget_max - tripRequest.budget_min;
-    // Lower difference = higher score (max 30 points)
     score += Math.max(0, 30 - (budgetDiff / Math.max(budgetRange, 1)) * 15);
 
-    // Travel time penalty: penalize destinations where travel eats into the trip
-    const oneWayHours = TRAVEL_HOURS[dest.region] ?? 6;
-    const totalTravelDays = Math.ceil(oneWayHours / 12) * 2;
-    const travelRatio = totalTravelDays / tripDays;
-    // Max 20 point penalty for travel-heavy trips
+    // Travel time penalty: prefer destinations with less travel overhead
+    const travelRatio = (dest.oneWayHours * 2) / tripHours;
     score -= travelRatio * 20;
 
     // DNA matching (if available)
     if (dna) {
       const tags = dest.tags;
-
-      // Adventure axis: adventure/hiking/outdoor tags
       if (dna.adventure > 0 && tags.some((t: string) => ["adventure", "hiking", "outdoor"].includes(t))) score += 15;
       if (dna.adventure < 0 && tags.some((t: string) => ["beach", "luxury", "romantic"].includes(t))) score += 15;
-
-      // Cultural axis: culture/art/history tags
       if (dna.cultural > 0 && tags.some((t: string) => ["culture", "art", "history", "architecture"].includes(t))) score += 15;
       if (dna.cultural < 0 && tags.some((t: string) => ["nature", "beach", "outdoor"].includes(t))) score += 15;
-
-      // Budget axis: budget vs luxury tags
       if (dna.budget > 0 && tags.some((t: string) => ["luxury", "shopping", "modern"].includes(t))) score += 10;
       if (dna.budget < 0 && tags.some((t: string) => ["budget"].includes(t))) score += 10;
-
-      // Social axis: nightlife/urban vs nature/unique
       if (dna.social > 0 && tags.some((t: string) => ["nightlife", "urban", "food"].includes(t))) score += 10;
       if (dna.social < 0 && tags.some((t: string) => ["nature", "unique", "photography"].includes(t))) score += 10;
-
-      // Energy axis: adventure/hiking vs beach/romantic
       if (dna.energy > 0 && tags.some((t: string) => ["adventure", "hiking", "nightlife"].includes(t))) score += 10;
       if (dna.energy < 0 && tags.some((t: string) => ["beach", "romantic", "nature"].includes(t))) score += 10;
     }
 
-    // Small random factor to add variety
+    // Small random factor for variety
     score += Math.random() * 5;
 
     return { ...dest, score };
   });
 
-  // Sort by score descending, pick the best match
   scored.sort((a, b) => b.score - a.score);
   const chosen = scored[0];
 
-  // Calculate trip dates, stay duration, and price
+  // ---- Calculate stay duration ----
   const startDate = tripRequest.departure_date;
   const endDate = tripRequest.return_date;
-  const totalNights = Math.max(1, Math.ceil(
-    (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
-  ));
+  const totalNights = tripDays;
 
-  // Subtract travel days from stay duration to get actual "on the ground" days
-  const chosenOneWayHours = TRAVEL_HOURS[chosen.region] ?? 6;
-  const travelDaysEachWay = chosenOneWayHours >= 12 ? 1 : 0; // Lose a day each way for long-haul
+  // Travel days: each way loses a day if travel > 8 hours
+  const travelDaysEachWay = chosen.oneWayHours >= 8 ? 1 : 0;
   const stayNights = Math.max(1, totalNights - (travelDaysEachWay * 2));
-  // Full activity days = stay nights (you have full days between arrival and departure)
   const activityDays = stayNights;
 
+  // ---- Price ----
+  // Road trips skip airfare, so reduce base price
+  const flightDiscount = travelMode === "road-trip" ? 0.65 : travelMode === "arrange-own-flights" ? 0.7 : 1.0;
   const pricePerPerson = Math.round(
-    chosen.avgPrice * (0.85 + Math.random() * 0.3)
+    chosen.avgPrice * flightDiscount * (0.85 + Math.random() * 0.3)
   );
   const totalPrice = pricePerPerson * tripRequest.party_size;
 
-  // Build the itinerary
+  // ---- Build itinerary ----
   const airlines = ["United Airlines", "Delta", "Emirates", "British Airways", "Lufthansa", "JAL"];
-  const itinerary = {
-    flights: {
-      outbound: {
-        from: tripRequest.departure_city,
-        to: `${chosen.name}, ${chosen.country}`,
-        date: startDate,
-        airline: airlines[Math.floor(Math.random() * airlines.length)],
-        estimatedHours: chosenOneWayHours,
-      },
-      return: {
-        from: `${chosen.name}, ${chosen.country}`,
-        to: tripRequest.departure_city,
-        date: endDate,
-        airline: airlines[Math.floor(Math.random() * airlines.length)],
-        estimatedHours: chosenOneWayHours,
-      },
-    },
+  const isRoadTrip = travelMode === "road-trip";
+  const includesFlights = travelMode === "flights-included";
+
+  // Drive distance for road trips
+  const driveMiles = isRoadTrip
+    ? Math.round(haversineMiles(departureCoords.lat, departureCoords.lng, chosen.lat, chosen.lng) * 1.3)
+    : 0;
+
+  const itinerary: Record<string, unknown> = {
     accommodation: {
       name: `${["Grand", "Boutique", "The", "Hotel"][Math.floor(Math.random() * 4)]} ${chosen.name} ${["Resort", "Hotel", "Inn", "Lodge", "Suites"][Math.floor(Math.random() * 5)]}`,
       nights: stayNights,
       type: dna && dna.budget > 0 ? "4-star" : "3-star",
     },
     activities: generateActivities(chosen.tags, activityDays),
+    travelMode,
     travelInfo: {
-      estimatedOneWayHours: chosenOneWayHours,
+      estimatedOneWayHours: Math.round(chosen.oneWayHours),
       travelDaysEachWay,
       stayNights,
       activityDays,
+      mode: travelMode,
     },
   };
+
+  if (includesFlights) {
+    itinerary.flights = {
+      outbound: {
+        from: tripRequest.departure_city,
+        to: `${chosen.name}, ${chosen.country}`,
+        date: startDate,
+        airline: airlines[Math.floor(Math.random() * airlines.length)],
+        estimatedHours: Math.round(chosen.oneWayHours),
+      },
+      return: {
+        from: `${chosen.name}, ${chosen.country}`,
+        to: tripRequest.departure_city,
+        date: endDate,
+        airline: airlines[Math.floor(Math.random() * airlines.length)],
+        estimatedHours: Math.round(chosen.oneWayHours),
+      },
+    };
+  } else if (travelMode === "arrange-own-flights") {
+    itinerary.flights = {
+      note: "You are arranging your own flights to and from the destination.",
+      estimatedFlightHours: Math.round(chosen.oneWayHours),
+    };
+  }
+
+  if (isRoadTrip) {
+    itinerary.driving = {
+      from: tripRequest.departure_city,
+      to: `${chosen.name}, ${chosen.country}`,
+      estimatedMiles: driveMiles,
+      estimatedHours: Math.round(chosen.oneWayHours),
+    };
+  }
 
   // Insert the trip (authenticated users have INSERT grant + RLS policy)
   const { data: trip, error: tripError } = await supabase

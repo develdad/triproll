@@ -21,20 +21,37 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
     redirect("/dashboard");
   }
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const itinerary = trip.itinerary as {
-    flights: {
-      outbound: { from: string; to: string; date: string; airline: string; estimatedHours?: number };
-      return: { from: string; to: string; date: string; airline: string; estimatedHours?: number };
+    flights?: {
+      outbound?: { from: string; to: string; date: string; airline: string; estimatedHours?: number };
+      return?: { from: string; to: string; date: string; airline: string; estimatedHours?: number };
+      note?: string;
+      estimatedFlightHours?: number;
+    };
+    driving?: {
+      from: string;
+      to: string;
+      estimatedMiles: number;
+      estimatedHours: number;
     };
     accommodation: { name: string; nights: number; type: string };
     activities: string[];
+    travelMode?: string;
     travelInfo?: {
       estimatedOneWayHours: number;
       travelDaysEachWay: number;
       stayNights: number;
       activityDays: number;
+      mode?: string;
     };
   };
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  const travelMode = itinerary.travelMode || itinerary.travelInfo?.mode || "flights-included";
+  const isRoadTrip = travelMode === "road-trip";
+  const isOwnFlights = travelMode === "arrange-own-flights";
+  const includesFlights = travelMode === "flights-included";
 
   const totalPrice = (trip.price_cents / 100).toLocaleString("en-US", {
     style: "currency",
@@ -67,7 +84,7 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
   // Use travelInfo if available (new trips), fall back to totalNights (legacy)
   const stayNights = itinerary.travelInfo?.stayNights ?? totalNights;
   const activityDays = itinerary.travelInfo?.activityDays ?? itinerary.activities.length;
-  const estimatedFlightHours = itinerary.travelInfo?.estimatedOneWayHours ?? itinerary.flights.outbound.estimatedHours;
+  const estimatedFlightHours = itinerary.travelInfo?.estimatedOneWayHours ?? itinerary.flights?.outbound?.estimatedHours;
 
   return (
     <div className="flex flex-col min-h-screen bg-cloud">
@@ -114,7 +131,13 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
                   </span>
                 </div>
               )}
-              {estimatedFlightHours && (
+              {isRoadTrip && itinerary.driving && (
+                <div>
+                  <span className="text-white/60 block">Drive</span>
+                  <span className="font-medium">~{itinerary.driving.estimatedHours}h / {itinerary.driving.estimatedMiles.toLocaleString()} mi each way</span>
+                </div>
+              )}
+              {!isRoadTrip && estimatedFlightHours && (
                 <div>
                   <span className="text-white/60 block">Flight Time</span>
                   <span className="font-medium">~{estimatedFlightHours}h each way</span>
@@ -127,79 +150,97 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
             </div>
           </div>
 
-          {/* Flights */}
+          {/* Travel: Flights or Driving */}
           <div className="bg-white rounded-2xl border border-silver/20 p-6 sm:p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-full bg-teal-bright/10 flex items-center justify-center text-xl">
-                &#9992;
+                {isRoadTrip ? <>&#128663;</> : <>&#9992;</>}
               </div>
-              <h2 className="text-xl font-display text-charcoal">Flights</h2>
+              <h2 className="text-xl font-display text-charcoal">
+                {isRoadTrip ? "Your Drive" : isOwnFlights ? "Getting There" : "Flights"}
+              </h2>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
-              {/* Outbound */}
+            {/* Road Trip */}
+            {isRoadTrip && itinerary.driving && (
               <div className="p-4 rounded-xl bg-cloud border border-silver/10">
-                <p className="text-xs font-medium uppercase tracking-wider text-teal-bright mb-3">
-                  Outbound
-                </p>
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="text-charcoal font-semibold">
-                    {itinerary.flights.outbound.from}
-                  </span>
+                  <span className="text-charcoal font-semibold">{itinerary.driving.from}</span>
                   <span className="text-silver">&rarr;</span>
-                  <span className="text-charcoal font-semibold">
-                    {itinerary.flights.outbound.to}
-                  </span>
+                  <span className="text-charcoal font-semibold">{itinerary.driving.to}</span>
                 </div>
-                <p className="text-sm text-slate">
-                  {new Date(
-                    itinerary.flights.outbound.date
-                  ).toLocaleDateString("en-US", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </p>
-                <p className="text-sm text-slate mt-1">
-                  {itinerary.flights.outbound.airline}
-                  {itinerary.flights.outbound.estimatedHours && (
-                    <span className="text-silver ml-2">~{itinerary.flights.outbound.estimatedHours}h</span>
-                  )}
+                <div className="flex gap-4 mt-2 text-sm text-slate">
+                  <span>~{itinerary.driving.estimatedHours}h drive</span>
+                  <span>{itinerary.driving.estimatedMiles.toLocaleString()} miles</span>
+                </div>
+                <p className="text-xs text-slate mt-3">
+                  Distance is approximate. Actual drive time may vary based on route and conditions.
                 </p>
               </div>
+            )}
 
-              {/* Return */}
+            {/* Arrange Own Flights */}
+            {isOwnFlights && (
               <div className="p-4 rounded-xl bg-cloud border border-silver/10">
-                <p className="text-xs font-medium uppercase tracking-wider text-peach mb-3">
-                  Return
-                </p>
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-charcoal font-semibold">
-                    {itinerary.flights.return.from}
-                  </span>
-                  <span className="text-silver">&rarr;</span>
-                  <span className="text-charcoal font-semibold">
-                    {itinerary.flights.return.to}
-                  </span>
-                </div>
+                <p className="text-charcoal font-medium mb-2">You are arranging your own flights</p>
                 <p className="text-sm text-slate">
-                  {new Date(itinerary.flights.return.date).toLocaleDateString(
-                    "en-US",
-                    {
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                    }
-                  )}
+                  We have planned your destination, accommodation, and activities. Book your own travel to {trip.destination_name}, {trip.destination_country}.
                 </p>
-                <p className="text-sm text-slate mt-1">
-                  {itinerary.flights.return.airline}
-                  {itinerary.flights.return.estimatedHours && (
-                    <span className="text-silver ml-2">~{itinerary.flights.return.estimatedHours}h</span>
-                  )}
-                </p>
+                {itinerary.flights?.estimatedFlightHours && (
+                  <p className="text-sm text-slate mt-2">
+                    Estimated flight time: ~{itinerary.flights.estimatedFlightHours}h each way
+                  </p>
+                )}
               </div>
-            </div>
+            )}
+
+            {/* Flights Included */}
+            {includesFlights && itinerary.flights?.outbound && itinerary.flights?.return && (
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-cloud border border-silver/10">
+                  <p className="text-xs font-medium uppercase tracking-wider text-teal-bright mb-3">
+                    Outbound
+                  </p>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-charcoal font-semibold">{itinerary.flights.outbound.from}</span>
+                    <span className="text-silver">&rarr;</span>
+                    <span className="text-charcoal font-semibold">{itinerary.flights.outbound.to}</span>
+                  </div>
+                  <p className="text-sm text-slate">
+                    {new Date(itinerary.flights.outbound.date).toLocaleDateString("en-US", {
+                      weekday: "short", month: "short", day: "numeric",
+                    })}
+                  </p>
+                  <p className="text-sm text-slate mt-1">
+                    {itinerary.flights.outbound.airline}
+                    {itinerary.flights.outbound.estimatedHours && (
+                      <span className="text-silver ml-2">~{itinerary.flights.outbound.estimatedHours}h</span>
+                    )}
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-cloud border border-silver/10">
+                  <p className="text-xs font-medium uppercase tracking-wider text-peach mb-3">
+                    Return
+                  </p>
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-charcoal font-semibold">{itinerary.flights.return.from}</span>
+                    <span className="text-silver">&rarr;</span>
+                    <span className="text-charcoal font-semibold">{itinerary.flights.return.to}</span>
+                  </div>
+                  <p className="text-sm text-slate">
+                    {new Date(itinerary.flights.return.date).toLocaleDateString("en-US", {
+                      weekday: "short", month: "short", day: "numeric",
+                    })}
+                  </p>
+                  <p className="text-sm text-slate mt-1">
+                    {itinerary.flights.return.airline}
+                    {itinerary.flights.return.estimatedHours && (
+                      <span className="text-silver ml-2">~{itinerary.flights.return.estimatedHours}h</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Accommodation */}
@@ -276,7 +317,9 @@ export default async function TripDetailPage({ params }: TripDetailPageProps) {
                   {totalPrice}
                 </p>
                 <p className="text-xs text-slate mt-1">
-                  Includes flights, accommodation, and activities
+                  {includesFlights && "Includes flights, accommodation, and activities"}
+                  {isOwnFlights && "Includes accommodation and activities (flights not included)"}
+                  {isRoadTrip && "Includes accommodation and activities (you drive)"}
                 </p>
               </div>
               {trip.status === "available" && (

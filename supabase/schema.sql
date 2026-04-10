@@ -107,6 +107,8 @@ create table public.trip_requests (
   party_type text not null default 'solo'
     check (party_type in ('solo', 'couple', 'small-group', 'group')),
   departure_city text not null,
+  travel_mode text not null default 'flights-included'
+    check (travel_mode in ('flights-included', 'arrange-own-flights', 'road-trip')),
   constraints_dietary text[] default '{}',
   constraints_mobility text[] default '{}',
   constraints_passport text[] default '{}',

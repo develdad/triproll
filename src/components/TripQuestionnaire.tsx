@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { BUDGET_RANGES, COMMON_DEPARTING_CITIES, CONSTRAINTS_OPTIONS } from "@/lib/constants";
+import { ALL_DESTINATIONS, BUDGET_RANGES, COMMON_DEPARTING_CITIES, CONSTRAINTS_OPTIONS } from "@/lib/constants";
 import type { TripRequest, TravelMode } from "@/lib/types";
 import { saveTripRequest, getActiveTravelDNA, generateTrip } from "@/app/actions";
 
-export default function TripQuestionnaire() {
+export default function TripQuestionnaire({
+  lockedDestinationId,
+}: {
+  lockedDestinationId?: string | null;
+}) {
+  // When coming from the globe spin, lock the destination
+  const lockedDestination = useMemo(
+    () => lockedDestinationId ? ALL_DESTINATIONS.find(d => d.id === lockedDestinationId) ?? null : null,
+    [lockedDestinationId]
+  );
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [submitted, setSubmitted] = useState(false);
@@ -125,7 +134,7 @@ export default function TripQuestionnaire() {
         constraintsPassport: formData.constraints.passport,
         constraintsOther: formData.constraints.other,
         travelMode: formData.travelMode,
-        mode: "commitment",
+        mode: lockedDestination ? "playground" : "commitment",
       });
 
       if (result.error) {
@@ -134,8 +143,8 @@ export default function TripQuestionnaire() {
         return;
       }
 
-      // Generate a trip based on the request + DNA
-      const tripResult = await generateTrip(result.data!.id);
+      // Generate a trip. If destination is locked (from globe), pass it through.
+      const tripResult = await generateTrip(result.data!.id, lockedDestinationId ?? undefined);
 
       if (tripResult.error || !tripResult.data) {
         // Trip generation failed, but request was saved. Go to dashboard.
@@ -191,9 +200,13 @@ export default function TripQuestionnaire() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-display text-charcoal mb-2">
-            Plan Your Trip
+            {lockedDestination ? `Book Your Trip to ${lockedDestination.name}` : "Plan Your Trip"}
           </h1>
-          <p className="text-slate">Help us understand your perfect getaway</p>
+          <p className="text-slate">
+            {lockedDestination
+              ? `Fill in a few details and we'll build your ${lockedDestination.name}, ${lockedDestination.country} itinerary.`
+              : "Help us understand your perfect getaway"}
+          </p>
         </div>
 
         {/* Progress Bar */}
@@ -469,6 +482,14 @@ export default function TripQuestionnaire() {
               <h2 className="text-2xl font-semibold text-charcoal mb-6">Review Your Details</h2>
 
               <div className="space-y-4">
+                {lockedDestination && (
+                  <div className="p-4 rounded-lg bg-teal-light/20 border border-teal-deep/20">
+                    <div className="text-sm text-teal-deep mb-1">Destination</div>
+                    <div className="font-semibold text-charcoal">
+                      {lockedDestination.name}, {lockedDestination.country}
+                    </div>
+                  </div>
+                )}
                 <div className="p-4 rounded-lg bg-cloud">
                   <div className="text-sm text-slate mb-1">Travel Dates</div>
                   <div className="font-semibold text-charcoal">
@@ -551,7 +572,7 @@ export default function TripQuestionnaire() {
               onClick={handleSubmit}
               className="flex-1 px-6 py-3 bg-gradient-to-r from-teal-deep to-ocean text-white rounded-lg hover:shadow-lg transition-all font-semibold"
             >
-              Get My Trip
+              {lockedDestination ? `Book ${lockedDestination.name}` : "Get My Trip"}
             </button>
           )}
         </div>

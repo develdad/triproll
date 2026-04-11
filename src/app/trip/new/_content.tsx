@@ -37,5 +37,6 @@ export default function TripNewContent() {
     );
   }
 
-  return <TripQuestionnaire />;
+  const destinationId = searchParams.get("destination");
+  return <TripQuestionnaire lockedDestinationId={destinationId} />;
 }

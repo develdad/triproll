@@ -177,7 +177,7 @@ export async function getTrip(tripId: string) {
 // Generate a trip from a trip request
 // Matches a destination from the sample set based on the user's Travel DNA and budget,
 // then fetches real flight pricing from Duffel + Kiwi (with mock fallback).
-export async function generateTrip(tripRequestId: string) {
+export async function generateTrip(tripRequestId: string, lockedDestinationId?: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -300,44 +300,62 @@ export async function generateTrip(tripRequestId: string) {
     });
   }
 
-  // ---- Score each candidate ----
-  type ScoredDest = DestWithTravel & { score: number };
-  const scored: ScoredDest[] = candidates.map((dest) => {
-    let score = 0;
+  // ---- Pick destination: locked (from globe) or scored ----
+  let chosen: DestWithTravel;
 
-    // Budget fit (max 30 points)
-    const budgetMid = (tripRequest.budget_min + tripRequest.budget_max) / 2;
-    const budgetDiff = Math.abs(dest.avgPrice - budgetMid);
-    const budgetRange = tripRequest.budget_max - tripRequest.budget_min;
-    score += Math.max(0, 30 - (budgetDiff / Math.max(budgetRange, 1)) * 15);
-
-    // Travel time penalty: prefer destinations with less travel overhead
-    const travelRatio = (dest.oneWayHours * 2) / tripHours;
-    score -= travelRatio * 20;
-
-    // DNA matching (if available)
-    if (dna) {
-      const tags = dest.tags;
-      if (dna.adventure > 0 && tags.some((t: string) => ["adventure", "hiking", "outdoor"].includes(t))) score += 15;
-      if (dna.adventure < 0 && tags.some((t: string) => ["beach", "luxury", "romantic"].includes(t))) score += 15;
-      if (dna.cultural > 0 && tags.some((t: string) => ["culture", "art", "history", "architecture"].includes(t))) score += 15;
-      if (dna.cultural < 0 && tags.some((t: string) => ["nature", "beach", "outdoor"].includes(t))) score += 15;
-      if (dna.budget > 0 && tags.some((t: string) => ["luxury", "shopping", "modern"].includes(t))) score += 10;
-      if (dna.budget < 0 && tags.some((t: string) => ["budget"].includes(t))) score += 10;
-      if (dna.social > 0 && tags.some((t: string) => ["nightlife", "urban", "food"].includes(t))) score += 10;
-      if (dna.social < 0 && tags.some((t: string) => ["nature", "unique", "photography"].includes(t))) score += 10;
-      if (dna.energy > 0 && tags.some((t: string) => ["adventure", "hiking", "nightlife"].includes(t))) score += 10;
-      if (dna.energy < 0 && tags.some((t: string) => ["beach", "romantic", "nature"].includes(t))) score += 10;
+  if (lockedDestinationId) {
+    // Globe spin flow: user already picked this destination, skip scoring
+    const locked = ALL_DESTINATIONS.find(d => d.id === lockedDestinationId);
+    if (locked) {
+      const flightHours = FLIGHT_HOURS[locked.region] ?? 6;
+      const miles = haversineMiles(departureCoords.lat, departureCoords.lng, locked.lat, locked.lng);
+      const driveHours = estimateDriveHours(miles);
+      const oneWayHours = travelMode === "road-trip" ? driveHours : flightHours;
+      chosen = { ...locked, oneWayHours, travelMode: travelMode === "road-trip" ? "drive" : "flights" };
+    } else {
+      // Fallback if ID doesn't match (shouldn't happen)
+      chosen = candidates[0];
     }
+  } else {
+    // Commitment flow: score all candidates by budget fit, travel time, and DNA
+    type ScoredDest = DestWithTravel & { score: number };
+    const scored: ScoredDest[] = candidates.map((dest) => {
+      let score = 0;
 
-    // Small random factor for variety
-    score += Math.random() * 5;
+      // Budget fit (max 30 points)
+      const budgetMid = (tripRequest.budget_min + tripRequest.budget_max) / 2;
+      const budgetDiff = Math.abs(dest.avgPrice - budgetMid);
+      const budgetRange = tripRequest.budget_max - tripRequest.budget_min;
+      score += Math.max(0, 30 - (budgetDiff / Math.max(budgetRange, 1)) * 15);
 
-    return { ...dest, score };
-  });
+      // Travel time penalty: prefer destinations with less travel overhead
+      const travelRatio = (dest.oneWayHours * 2) / tripHours;
+      score -= travelRatio * 20;
 
-  scored.sort((a, b) => b.score - a.score);
-  const chosen = scored[0];
+      // DNA matching (if available)
+      if (dna) {
+        const tags = dest.tags;
+        if (dna.adventure > 0 && tags.some((t: string) => ["adventure", "hiking", "outdoor"].includes(t))) score += 15;
+        if (dna.adventure < 0 && tags.some((t: string) => ["beach", "luxury", "romantic"].includes(t))) score += 15;
+        if (dna.cultural > 0 && tags.some((t: string) => ["culture", "art", "history", "architecture"].includes(t))) score += 15;
+        if (dna.cultural < 0 && tags.some((t: string) => ["nature", "beach", "outdoor"].includes(t))) score += 15;
+        if (dna.budget > 0 && tags.some((t: string) => ["luxury", "shopping", "modern"].includes(t))) score += 10;
+        if (dna.budget < 0 && tags.some((t: string) => ["budget"].includes(t))) score += 10;
+        if (dna.social > 0 && tags.some((t: string) => ["nightlife", "urban", "food"].includes(t))) score += 10;
+        if (dna.social < 0 && tags.some((t: string) => ["nature", "unique", "photography"].includes(t))) score += 10;
+        if (dna.energy > 0 && tags.some((t: string) => ["adventure", "hiking", "nightlife"].includes(t))) score += 10;
+        if (dna.energy < 0 && tags.some((t: string) => ["beach", "romantic", "nature"].includes(t))) score += 10;
+      }
+
+      // Small random factor for variety
+      score += Math.random() * 5;
+
+      return { ...dest, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    chosen = scored[0];
+  }
 
   // ---- Calculate stay duration ----
   const startDate = tripRequest.departure_date;

@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BUDGET_RANGES, COMMON_DEPARTING_CITIES, CONSTRAINTS_OPTIONS } from "@/lib/constants";
-import type { TripRequest } from "@/lib/types";
-import { saveTripRequest } from "@/app/actions";
+import type { TripRequest, TravelMode } from "@/lib/types";
+import { saveTripRequest, getActiveTravelDNA, generateTrip } from "@/app/actions";
 
 export default function TripQuestionnaire() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function TripQuestionnaire() {
     partySize: 1,
     partyType: "solo",
     departureCity: "",
+    travelMode: "flights-included" as TravelMode,
     constraints: {
       dietary: [],
       mobility: [],
@@ -34,12 +35,34 @@ export default function TripQuestionnaire() {
     { title: "Budget", icon: "💰" },
     { title: "Travel Party", icon: "👥" },
     { title: "Departure City", icon: "✈️" },
+    { title: "Getting There", icon: "🛣️" },
     { title: "Constraints", icon: "🚫" },
     { title: "Review", icon: "✅" },
   ];
 
+  const [dateError, setDateError] = useState<string | null>(null);
+
   const handleDateChange = (field: "departureDate" | "returnDate", value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setDateError(null);
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+
+      // Validate: return date must be after departure date
+      if (updated.departureDate && updated.returnDate) {
+        const dep = new Date(updated.departureDate);
+        const ret = new Date(updated.returnDate);
+        if (ret <= dep) {
+          setDateError("Return date must be after your departure date.");
+        } else {
+          const days = Math.ceil((ret.getTime() - dep.getTime()) / (1000 * 60 * 60 * 24));
+          if (days < 2) {
+            setDateError("Trips must be at least 2 nights. Even a quick getaway needs a little breathing room.");
+          }
+        }
+      }
+
+      return updated;
+    });
   };
 
   const handleBudgetChange = (min: number, max: number) => {
@@ -76,47 +99,58 @@ export default function TripQuestionnaire() {
     });
   };
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const handleSubmit = async () => {
     setSubmitted(true);
+    setSubmitError(null);
 
-    // Get Travel DNA ID from session storage if available
-    let travelDnaId: string | undefined;
     try {
-      const dna = sessionStorage.getItem("travelDNA");
-      if (dna) {
-        const parsed = JSON.parse(dna);
-        travelDnaId = parsed.id;
+      // Fetch the user's active Travel DNA from Supabase
+      const dna = await getActiveTravelDNA();
+      const travelDnaId = dna?.id;
+
+      // Save the trip request
+      const result = await saveTripRequest({
+        travelDnaId,
+        departureDate: formData.departureDate,
+        returnDate: formData.returnDate,
+        budgetMin: formData.budgetMin,
+        budgetMax: formData.budgetMax,
+        partySize: formData.partySize,
+        partyType: formData.partyType,
+        departureCity: formData.departureCity,
+        constraintsDietary: formData.constraints.dietary,
+        constraintsMobility: formData.constraints.mobility,
+        constraintsPassport: formData.constraints.passport,
+        constraintsOther: formData.constraints.other,
+        travelMode: formData.travelMode,
+        mode: "commitment",
+      });
+
+      if (result.error) {
+        setSubmitError(result.error);
+        setSubmitted(false);
+        return;
       }
-    } catch { /* ignore */ }
 
-    // Persist to database via server action
-    const result = await saveTripRequest({
-      travelDnaId,
-      departureDate: formData.departureDate,
-      returnDate: formData.returnDate,
-      budgetMin: formData.budgetMin,
-      budgetMax: formData.budgetMax,
-      partySize: formData.partySize,
-      partyType: formData.partyType,
-      departureCity: formData.departureCity,
-      constraintsDietary: formData.constraints.dietary,
-      constraintsMobility: formData.constraints.mobility,
-      constraintsPassport: formData.constraints.passport,
-      constraintsOther: formData.constraints.other,
-      mode: "commitment",
-    });
+      // Generate a trip based on the request + DNA
+      const tripResult = await generateTrip(result.data!.id);
 
-    // Also store in session storage as fallback
-    sessionStorage.setItem("tripRequest", JSON.stringify({
-      ...formData,
-      id: result.data?.id,
-      status: "submitted",
-    }));
+      if (tripResult.error || !tripResult.data) {
+        // Trip generation failed, but request was saved. Go to dashboard.
+        setTimeout(() => router.push("/dashboard"), 2500);
+        return;
+      }
 
-    // Navigate to confirmation
-    setTimeout(() => {
-      router.push("/dashboard");
-    }, 2500);
+      // Navigate to the trip detail page
+      setTimeout(() => {
+        router.push(`/trip/${tripResult.data!.id}`);
+      }, 2500);
+    } catch {
+      setSubmitError("Something went wrong. Please try again.");
+      setSubmitted(false);
+    }
   };
 
   const progress = ((step + 1) / steps.length) * 100;
@@ -216,10 +250,17 @@ export default function TripQuestionnaire() {
                 <input
                   type="date"
                   value={formData.returnDate}
+                  min={formData.departureDate || undefined}
                   onChange={(e) => handleDateChange("returnDate", e.target.value)}
                   className="w-full px-4 py-3 border border-silver/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep focus:border-transparent"
                 />
               </div>
+
+              {dateError && (
+                <div className="p-3 rounded-lg bg-peach/10 border border-peach/30 text-sm text-coral">
+                  {dateError}
+                </div>
+              )}
             </div>
           )}
 
@@ -312,8 +353,63 @@ export default function TripQuestionnaire() {
             </div>
           )}
 
-          {/* Step 5: Constraints */}
+          {/* Step 5: Getting There */}
           {step === 4 && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-semibold text-charcoal mb-2">How would you like to get there?</h2>
+              <p className="text-slate text-sm mb-6">This shapes which destinations we can match you with and what we include in your package.</p>
+
+              <div className="space-y-3">
+                {([
+                  {
+                    mode: "flights-included" as TravelMode,
+                    label: "Book my flights",
+                    description: "We handle everything, including round-trip airfare to your destination.",
+                    icon: "✈️",
+                  },
+                  {
+                    mode: "arrange-own-flights" as TravelMode,
+                    label: "I'll arrange my own flights",
+                    description: "We plan your destination, accommodation, and activities. You book your own travel to get there.",
+                    icon: "🎫",
+                  },
+                  {
+                    mode: "road-trip" as TravelMode,
+                    label: "Road trip",
+                    description: "We find a drivable destination and plan everything on the ground. You hit the road.",
+                    icon: "🚗",
+                  },
+                ]).map((option) => (
+                  <button
+                    key={option.mode}
+                    onClick={() => setFormData((prev) => ({ ...prev, travelMode: option.mode }))}
+                    className={`w-full p-5 rounded-lg border-2 transition-all text-left ${
+                      formData.travelMode === option.mode
+                        ? "border-teal-deep bg-teal-light/20"
+                        : "border-silver/30 hover:border-teal-light"
+                    }`}
+                  >
+                    <div className="flex items-start gap-4">
+                      <span className="text-2xl mt-0.5">{option.icon}</span>
+                      <div>
+                        <div className="font-semibold text-charcoal">{option.label}</div>
+                        <div className="text-sm text-slate mt-1">{option.description}</div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {formData.travelMode === "road-trip" && (
+                <div className="p-3 rounded-lg bg-cloud border border-silver/20 text-sm text-slate">
+                  Destinations will be limited to places within driving distance of {formData.departureCity || "your departure city"}, scaled to your trip length.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 6: Constraints */}
+          {step === 5 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-semibold text-charcoal mb-6">Any constraints we should know about?</h2>
 
@@ -367,8 +463,8 @@ export default function TripQuestionnaire() {
             </div>
           )}
 
-          {/* Step 6: Review */}
-          {step === 5 && (
+          {/* Step 7: Review */}
+          {step === 6 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-semibold text-charcoal mb-6">Review Your Details</h2>
 
@@ -397,6 +493,15 @@ export default function TripQuestionnaire() {
                 <div className="p-4 rounded-lg bg-cloud">
                   <div className="text-sm text-slate mb-1">Departure City</div>
                   <div className="font-semibold text-charcoal">{formData.departureCity}</div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-cloud">
+                  <div className="text-sm text-slate mb-1">Getting There</div>
+                  <div className="font-semibold text-charcoal">
+                    {formData.travelMode === "flights-included" && "Flights included in package"}
+                    {formData.travelMode === "arrange-own-flights" && "Arranging own flights"}
+                    {formData.travelMode === "road-trip" && "Road trip (driving)"}
+                  </div>
                 </div>
 
                 {(formData.constraints.dietary.length > 0 ||
@@ -434,7 +539,7 @@ export default function TripQuestionnaire() {
             <button
               onClick={() => setStep(step + 1)}
               disabled={
-                (step === 0 && (!formData.departureDate || !formData.returnDate)) ||
+                (step === 0 && (!formData.departureDate || !formData.returnDate || !!dateError)) ||
                 (step === 3 && !formData.departureCity)
               }
               className="flex-1 px-6 py-3 bg-teal-deep text-white rounded-lg hover:bg-ocean transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"

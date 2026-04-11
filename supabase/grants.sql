@@ -17,6 +17,5 @@ grant select, insert, update on public.travel_dna to authenticated;
 -- Trip Requests: authenticated users manage their requests
 grant select, insert, update on public.trip_requests to authenticated;
 
--- Trips: users can view and update (for booking status), service_role inserts (curation)
-grant select, update on public.trips to authenticated;
-grant insert on public.trips to service_role;
+-- Trips: authenticated users can insert (via generateTrip server action), view, and update
+grant select, insert, update on public.trips to authenticated;

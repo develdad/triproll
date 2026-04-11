@@ -34,13 +34,13 @@ export default function Navbar() {
         {/* Auth Buttons */}
         <div className="hidden sm:flex items-center gap-3">
           <Link
-            href="/auth/login"
+            href="/login"
             className="text-sm text-teal-deep border border-teal-deep px-4 py-2 rounded-full hover:bg-teal-deep hover:text-white transition-all"
           >
             Log In
           </Link>
           <Link
-            href="/auth/signup"
+            href="/signup"
             className="text-sm bg-teal-deep text-white px-4 py-2 rounded-full hover:bg-ocean transition-colors"
           >
             Sign Up
@@ -77,13 +77,13 @@ export default function Navbar() {
             </a>
             <div className="border-t border-silver/20 pt-3 space-y-2">
               <Link
-                href="/auth/login"
+                href="/login"
                 className="block text-sm text-teal-deep border border-teal-deep px-4 py-2 rounded-full hover:bg-teal-deep hover:text-white transition-all text-center"
               >
                 Log In
               </Link>
               <Link
-                href="/auth/signup"
+                href="/signup"
                 className="block text-sm bg-teal-deep text-white px-4 py-2 rounded-full hover:bg-ocean transition-colors text-center"
               >
                 Sign Up

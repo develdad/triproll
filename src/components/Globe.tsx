@@ -1,28 +1,169 @@
 "use client";
 
 import { useRef, useState, useCallback, useMemo, useEffect, Suspense } from "react";
+import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useTexture } from "@react-three/drei";
 import * as THREE from "three";
+import { ALL_DESTINATIONS } from "@/lib/constants";
+import type { Destination } from "@/lib/types";
+import { getActiveTravelDNA } from "@/app/actions";
 
-// Sample destinations for demo
-const DEMO_DESTINATIONS = [
-  { name: "Barcelona, Spain", lat: 41.39, lng: 2.17, theme: "Cultural Immersion", days: 4 },
-  { name: "Kyoto, Japan", lat: 35.01, lng: 135.77, theme: "Ancient Wonders", days: 5 },
-  { name: "Santorini, Greece", lat: 36.39, lng: 25.46, theme: "Island Escape", days: 4 },
-  { name: "Banff, Canada", lat: 51.18, lng: -115.57, theme: "Mountain Adventure", days: 3 },
-  { name: "Marrakech, Morocco", lat: 31.63, lng: -8.0, theme: "Exotic Discovery", days: 5 },
-  { name: "Queenstown, NZ", lat: -45.03, lng: 168.66, theme: "Thrill Seeker", days: 4 },
-  { name: "Reykjavik, Iceland", lat: 64.15, lng: -21.94, theme: "Northern Lights", days: 3 },
-  { name: "Amalfi Coast, Italy", lat: 40.63, lng: 14.60, theme: "Coastal Romance", days: 5 },
-  { name: "Sedona, Arizona", lat: 34.87, lng: -111.76, theme: "Desert Wellness", days: 3 },
-  { name: "Tulum, Mexico", lat: 20.21, lng: -87.43, theme: "Beach Bliss", days: 4 },
-];
+// ---- Map real destinations to globe card display shape ----
 
-export type GlobeDestination = (typeof DEMO_DESTINATIONS)[number] | null;
+type GlobeDestinationData = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  theme: string;
+  days: number;
+  image: string;
+  climate: string;
+  tempRange: string;
+  costRange: string;
+};
+
+export type GlobeDestination = GlobeDestinationData | null;
+
+const TAG_THEMES: Record<string, string> = {
+  beach: "Beach Getaway",
+  culture: "Cultural Immersion",
+  nature: "Nature Escape",
+  adventure: "Adventure Trek",
+  urban: "City Explorer",
+  food: "Culinary Journey",
+  history: "Historic Discovery",
+  luxury: "Luxury Retreat",
+  budget: "Budget Adventure",
+  nightlife: "Nightlife & Social",
+  hiking: "Mountain Adventure",
+  desert: "Desert Wellness",
+  tropical: "Tropical Paradise",
+  winter: "Winter Wonderland",
+  island: "Island Escape",
+  wine: "Wine & Dine",
+  spiritual: "Spiritual Journey",
+  wildlife: "Wildlife Safari",
+  romantic: "Romantic Escape",
+  surf: "Surf & Sun",
+  ski: "Ski & Snow",
+  art: "Art & Design",
+  music: "Music & Nightlife",
+  tech: "Tech & Innovation",
+};
+
+const REGION_CLIMATE: Record<string, { climate: string; tempRange: string }> = {
+  Asia: { climate: "Warm & Humid", tempRange: "22-34°C" },
+  Europe: { climate: "Mild & Seasonal", tempRange: "10-28°C" },
+  "Latin America": { climate: "Tropical & Warm", tempRange: "24-33°C" },
+  "Middle East": { climate: "Hot & Arid", tempRange: "25-42°C" },
+  Africa: { climate: "Warm & Varied", tempRange: "20-35°C" },
+  Oceania: { climate: "Mild & Coastal", tempRange: "12-26°C" },
+  "North America": { climate: "Varied Continental", tempRange: "5-30°C" },
+  USA: { climate: "Varied Continental", tempRange: "5-32°C" },
+};
+
+function mapDestination(dest: Destination): GlobeDestinationData {
+  // Theme from first matching tag
+  const theme =
+    dest.tags.reduce<string | null>(
+      (found, tag) => found || TAG_THEMES[tag] || null,
+      null
+    ) || "Hidden Gem";
+
+  // Days scaled from price: budget trips shorter, premium longer
+  const days = dest.avgPrice < 1000 ? 3 : dest.avgPrice < 2000 ? 4 : 5;
+
+  // Climate from region
+  const regionInfo = REGION_CLIMATE[dest.region] || {
+    climate: "Pleasant",
+    tempRange: "15-28°C",
+  };
+
+  // Cost range: +/- 25% around avgPrice
+  const low = Math.round(dest.avgPrice * 0.75 / 50) * 50;
+  const high = Math.round(dest.avgPrice * 1.25 / 50) * 50;
+  const costRange = `$${low.toLocaleString()} - $${high.toLocaleString()}`;
+
+  return {
+    id: dest.id,
+    name: `${dest.name}, ${dest.country}`,
+    lat: dest.lat,
+    lng: dest.lng,
+    theme,
+    days,
+    image: dest.imageUrl.includes("unsplash.com")
+      ? `${dest.imageUrl.split("?")[0]}?w=600&h=300&fit=crop`
+      : dest.imageUrl,
+    climate: regionInfo.climate,
+    tempRange: regionInfo.tempRange,
+    costRange,
+  };
+}
+
+const GLOBE_DESTINATIONS: GlobeDestinationData[] =
+  ALL_DESTINATIONS.map(mapDestination);
+
+// ---- DNA-weighted destination picker ----
+// Scores each destination by Travel DNA tag affinity, then does weighted random selection.
+// Without DNA, falls back to uniform random.
+type TravelDNA = {
+  adventure: number;
+  cultural: number;
+  budget: number;
+  social: number;
+  energy: number;
+  structure: number;
+};
+
+function scoreDest(dest: Destination, dna: TravelDNA): number {
+  let score = 10; // base score so every destination has a chance
+  const tags = dest.tags;
+  if (dna.adventure > 0 && tags.some(t => ["adventure", "hiking", "outdoor"].includes(t))) score += 8;
+  if (dna.adventure < 0 && tags.some(t => ["beach", "luxury", "romantic"].includes(t))) score += 8;
+  if (dna.cultural > 0 && tags.some(t => ["culture", "art", "history", "architecture"].includes(t))) score += 8;
+  if (dna.cultural < 0 && tags.some(t => ["nature", "beach", "outdoor"].includes(t))) score += 8;
+  if (dna.budget > 0 && tags.some(t => ["luxury", "shopping"].includes(t))) score += 5;
+  if (dna.budget < 0 && tags.some(t => ["budget"].includes(t))) score += 5;
+  if (dna.social > 0 && tags.some(t => ["nightlife", "urban", "food"].includes(t))) score += 5;
+  if (dna.social < 0 && tags.some(t => ["nature", "unique", "photography"].includes(t))) score += 5;
+  if (dna.energy > 0 && tags.some(t => ["adventure", "hiking", "nightlife"].includes(t))) score += 5;
+  if (dna.energy < 0 && tags.some(t => ["beach", "romantic", "nature"].includes(t))) score += 5;
+  return score;
+}
+
+function pickWeightedDestination(dna: TravelDNA | null): GlobeDestinationData {
+  if (!dna) {
+    return GLOBE_DESTINATIONS[Math.floor(Math.random() * GLOBE_DESTINATIONS.length)];
+  }
+
+  const weights = ALL_DESTINATIONS.map(d => scoreDest(d, dna));
+  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+  let roll = Math.random() * totalWeight;
+
+  for (let i = 0; i < weights.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return GLOBE_DESTINATIONS[i];
+  }
+  return GLOBE_DESTINATIONS[GLOBE_DESTINATIONS.length - 1];
+}
 
 interface GlobeProps {
   onDestinationRevealed?: (dest: GlobeDestination) => void;
+}
+
+// ---- Hook to detect mobile ----
+function useIsMobile(breakpoint = 640) {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < breakpoint);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [breakpoint]);
+  return isMobile;
 }
 
 // ---- Particle field around the globe ----
@@ -57,13 +198,7 @@ function Particles() {
 
   return (
     <points ref={pointsRef} geometry={geo}>
-      <pointsMaterial
-        size={0.015}
-        color="#ffffff"
-        transparent
-        opacity={0.4}
-        sizeAttenuation
-      />
+      <pointsMaterial size={0.015} color="#ffffff" transparent opacity={0.4} sizeAttenuation />
     </points>
   );
 }
@@ -72,39 +207,21 @@ function Particles() {
 function DestinationPin({ pinRef }: { pinRef: React.MutableRefObject<THREE.Group | null> }) {
   return (
     <group ref={pinRef} scale={[0, 0, 0]}>
-      {/* Pin head (larger sphere) */}
       <mesh position={[0, 0.12, 0]}>
         <sphereGeometry args={[0.05, 16, 16]} />
-        <meshStandardMaterial
-          color="#F4845F"
-          emissive="#F4845F"
-          emissiveIntensity={0.5}
-        />
+        <meshStandardMaterial color="#F4845F" emissive="#F4845F" emissiveIntensity={0.5} />
       </mesh>
-      {/* Pin stick (longer, thicker) */}
       <mesh position={[0, 0.05, 0]}>
         <cylinderGeometry args={[0.008, 0.008, 0.1, 8]} />
         <meshStandardMaterial color="#E17055" />
       </mesh>
-      {/* Glow ring at base */}
       <mesh position={[0, 0.003, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.03, 0.06, 32]} />
-        <meshBasicMaterial
-          color="#F4845F"
-          transparent
-          opacity={0.5}
-          side={THREE.DoubleSide}
-        />
+        <meshBasicMaterial color="#F4845F" transparent opacity={0.5} side={THREE.DoubleSide} />
       </mesh>
-      {/* Outer pulse ring */}
       <mesh position={[0, 0.002, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.06, 0.08, 32]} />
-        <meshBasicMaterial
-          color="#F4845F"
-          transparent
-          opacity={0.2}
-          side={THREE.DoubleSide}
-        />
+        <meshBasicMaterial color="#F4845F" transparent opacity={0.2} side={THREE.DoubleSide} />
       </mesh>
     </group>
   );
@@ -125,17 +242,14 @@ function CardPositionTracker({
   useFrame(() => {
     if (!showCard || !pinRef.current || !pinRef.current.visible || !cameraRef.current) return;
 
-    // Update matrices
     if (pinRef.current.parent) {
       pinRef.current.parent.updateMatrixWorld(true);
     }
 
-    // Get pin tip in world space
-    const pinTip = new THREE.Vector3(0, 0.14, 0);
-    pinRef.current.localToWorld(pinTip);
+    const pinHead = new THREE.Vector3(0, 0.12, 0);
+    pinRef.current.localToWorld(pinHead);
 
-    // Project to NDC
-    const ndc = pinTip.clone().project(cameraRef.current);
+    const ndc = pinHead.clone().project(cameraRef.current);
     if (ndc.z > 1) {
       onPositionUpdate(null);
       return;
@@ -173,15 +287,20 @@ function CanvasInteraction({
   isAutoRotating,
   isLanded,
   globeRef,
+  isMobile,
 }: {
   isSpinning: React.MutableRefObject<boolean>;
   isAutoRotating: React.MutableRefObject<boolean>;
   isLanded: React.MutableRefObject<boolean>;
   globeRef: React.MutableRefObject<THREE.Mesh | null>;
+  isMobile: boolean;
 }) {
   const { gl } = useThree();
   const isDraggingRef = useRef(false);
   const prevXRef = useRef(0);
+  const startXRef = useRef(0);
+  const startYRef = useRef(0);
+  const dragLockedRef = useRef<"horizontal" | "vertical" | null>(null);
   const tempQuat = useMemo(() => new THREE.Quaternion(), []);
   const idleAxisY = useMemo(() => new THREE.Vector3(0, 1, 0), []);
 
@@ -192,27 +311,43 @@ function CanvasInteraction({
     const handlePointerDown = (e: PointerEvent) => {
       if (!isSpinning.current && !isLanded.current) {
         isDraggingRef.current = true;
-        prevXRef.current = (e as any).clientX;
+        prevXRef.current = e.clientX;
+        startXRef.current = e.clientX;
+        startYRef.current = e.clientY;
+        dragLockedRef.current = null;
       }
     };
 
     const handlePointerMove = (e: PointerEvent) => {
       if (
-        isDraggingRef.current &&
-        !isSpinning.current &&
-        !isAutoRotating.current &&
-        !isLanded.current &&
-        globeRef.current
-      ) {
-        const dx = (e as any).clientX - prevXRef.current;
-        tempQuat.setFromAxisAngle(idleAxisY, dx * 0.005);
-        globeRef.current.quaternion.premultiply(tempQuat);
-        prevXRef.current = (e as any).clientX;
+        !isDraggingRef.current ||
+        isSpinning.current ||
+        isAutoRotating.current ||
+        isLanded.current ||
+        !globeRef.current
+      ) return;
+
+      if (isMobile && !dragLockedRef.current) {
+        const dx = Math.abs(e.clientX - startXRef.current);
+        const dy = Math.abs(e.clientY - startYRef.current);
+        const threshold = 8;
+        if (dx > threshold || dy > threshold) {
+          dragLockedRef.current = dx > dy ? "horizontal" : "vertical";
+        }
+        return;
       }
+
+      if (isMobile && dragLockedRef.current === "vertical") return;
+
+      const dx = e.clientX - prevXRef.current;
+      tempQuat.setFromAxisAngle(idleAxisY, dx * 0.005);
+      globeRef.current.quaternion.premultiply(tempQuat);
+      prevXRef.current = e.clientX;
     };
 
     const handlePointerUp = () => {
       isDraggingRef.current = false;
+      dragLockedRef.current = null;
     };
 
     canvas.addEventListener("pointerdown", handlePointerDown);
@@ -226,7 +361,7 @@ function CanvasInteraction({
       canvas.removeEventListener("pointerup", handlePointerUp);
       canvas.removeEventListener("pointerleave", handlePointerUp);
     };
-  }, [gl, isSpinning, isAutoRotating, isLanded, tempQuat, idleAxisY, globeRef]);
+  }, [gl, isSpinning, isAutoRotating, isLanded, tempQuat, idleAxisY, globeRef, isMobile]);
 
   return null;
 }
@@ -257,14 +392,11 @@ function Earth({
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const pinRef = useRef<THREE.Group>(null);
-  const { camera } = useThree();
 
-  // Load NASA Blue Marble Earth texture
   const earthTexture = useTexture(
     "https://unpkg.com/three-globe@2.34.2/example/img/earth-blue-marble.jpg"
   );
 
-  // Critical: set SRGB color space so the texture renders bright (not dark/linear)
   useEffect(() => {
     if (earthTexture) {
       earthTexture.colorSpace = THREE.SRGBColorSpace;
@@ -290,7 +422,6 @@ function Earth({
     if (!meshRef.current) return;
 
     if (isSpinning.current) {
-      // Multilateral spin: rotate around random axis with lateral tilt
       spinSpeed.current *= friction;
       tempQuat.setFromAxisAngle(spinAxis.current, spinSpeed.current);
       meshRef.current.quaternion.premultiply(tempQuat);
@@ -301,7 +432,6 @@ function Earth({
         onSpinComplete();
       }
     } else if (isAutoRotating.current && targetQuaternion.current) {
-      // Smoothly slerp globe quaternion to center pin toward camera
       meshRef.current.quaternion.slerp(targetQuaternion.current, 0.045);
       if (meshRef.current.quaternion.angleTo(targetQuaternion.current) < 0.005) {
         meshRef.current.quaternion.copy(targetQuaternion.current);
@@ -309,13 +439,11 @@ function Earth({
         isLanded.current = true;
       }
     } else if (!isLanded.current) {
-      // Idle: gentle Y rotation using quaternion premultiply
       tempQuat.setFromAxisAngle(idleAxisY, idleSpeed);
       meshRef.current.quaternion.premultiply(tempQuat);
     }
   });
 
-  // Animate pin scale (pop-in effect)
   useFrame(() => {
     if (pinRef.current) {
       const target = pinRef.current.visible ? 1 : 0;
@@ -329,260 +457,539 @@ function Earth({
 
   return (
     <group>
-      {/* Earth mesh with NASA Blue Marble texture -- pin is a CHILD so it rotates with the globe */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[1, 64, 64]} />
-        <meshStandardMaterial
-          map={earthTexture}
-          roughness={0.7}
-          metalness={0.05}
-        />
-        {/* Destination pin (child of mesh, rotates with globe quaternion) */}
+        <meshStandardMaterial map={earthTexture} roughness={0.55} metalness={0.02} />
         <DestinationPin pinRef={pinRef} />
       </mesh>
-
-      {/* Atmosphere glow */}
-      <mesh position={[0, 0, 0]}>
+      <mesh>
         <sphereGeometry args={[1.04, 64, 64]} />
-        <meshBasicMaterial
-          color={0x4fc3f7}
-          transparent
-          opacity={0.08}
-          side={THREE.BackSide}
-        />
+        <meshBasicMaterial color={0x4fc3f7} transparent opacity={0.08} side={THREE.BackSide} />
       </mesh>
-
-      {/* Outer atmosphere halo */}
-      <mesh position={[0, 0, 0]}>
+      <mesh>
         <sphereGeometry args={[1.1, 64, 64]} />
-        <meshBasicMaterial
-          color={0x81d4fa}
-          transparent
-          opacity={0.05}
-          side={THREE.BackSide}
-        />
+        <meshBasicMaterial color={0x81d4fa} transparent opacity={0.05} side={THREE.BackSide} />
       </mesh>
     </group>
   );
 }
 
-// ---- Trip card overlay HTML component with genie effect ----
-function TripCard({
+// ---- Card content shared by both layouts ----
+function CardBody({
+  destination,
+  isMobile,
+  onBook,
+}: {
+  destination: NonNullable<GlobeDestination>;
+  isMobile: boolean;
+  onBook?: () => void;
+}) {
+  if (isMobile) {
+    // ── MOBILE: taller image, roomier spacing (scrollable modal) ──
+    return (
+      <>
+        <div style={{ position: "relative", width: "100%", height: 160, overflow: "hidden" }}>
+          <img
+            src={destination.image}
+            alt={destination.name}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          />
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
+            background: "linear-gradient(transparent, rgba(0,0,0,0.5))",
+          }} />
+          <span style={{
+            position: "absolute", top: 10, right: 10,
+            background: "#0D7377", color: "white",
+            fontSize: 12, fontWeight: 600,
+            padding: "3px 10px", borderRadius: 20,
+          }}>
+            {destination.days} nights
+          </span>
+          <div style={{ position: "absolute", bottom: 10, left: 14, right: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 2 }}>
+              Your Destination
+            </p>
+            <h3 style={{ fontSize: 22, fontWeight: 700, color: "white", lineHeight: 1.2, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
+              {destination.name}
+            </h3>
+          </div>
+        </div>
+
+        <div style={{ padding: "16px 16px 20px" }}>
+          <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: "#FFF5F0" }}>
+            <p style={{ fontSize: 11, color: "#999", marginBottom: 2 }}>Trip Theme</p>
+            <p style={{ fontSize: 15, fontWeight: 600, color: "#2D3436" }}>
+              {destination.theme}
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#F0FAFA" }}>
+              <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Climate</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
+              <p style={{ fontSize: 11, color: "#666" }}>{destination.tempRange}</p>
+            </div>
+            <div className="rounded-lg px-3 py-2" style={{ flex: 1, background: "#FFF8F5" }}>
+              <p style={{ fontSize: 10, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
+              <p style={{ fontSize: 11, color: "#666" }}>Flights + hotel + activities</p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+            {[
+              { icon: "\u2708\uFE0F", label: "Flights" },
+              { icon: "\uD83C\uDFE8", label: "Hotel" },
+              { icon: "\uD83C\uDFAF", label: "Activities" },
+              { icon: "\uD83D\uDE97", label: "Transport" },
+            ].map((item) => (
+              <span
+                key={item.label}
+                style={{
+                  fontSize: 12, color: "#666", background: "#f5f5f3",
+                  padding: "3px 8px", borderRadius: 6, display: "inline-flex",
+                  alignItems: "center", gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{item.icon}</span>
+                {item.label}
+              </span>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={onBook}
+              style={{
+              flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
+              padding: "12px 0", borderRadius: 12,
+              fontSize: 15, border: "none", cursor: "pointer",
+            }}>
+              Book This Trip
+            </button>
+            <button style={{
+              padding: "12px 18px",
+              border: "1px solid #e0e0e0", color: "#666",
+              borderRadius: 12, fontSize: 15,
+              background: "white", cursor: "pointer",
+            }}>
+              Details
+            </button>
+          </div>
+
+        </div>
+      </>
+    );
+  }
+
+  // ── DESKTOP: compact single-view layout, no internal scroll ──
+  return (
+    <>
+      {/* Hero image: short to save vertical space */}
+      <div style={{ position: "relative", width: "100%", height: 100, overflow: "hidden" }}>
+        <img
+          src={destination.image}
+          alt={destination.name}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, height: 50,
+          background: "linear-gradient(transparent, rgba(0,0,0,0.55))",
+        }} />
+        <span style={{
+          position: "absolute", top: 8, right: 8,
+          background: "#0D7377", color: "white",
+          fontSize: 10, fontWeight: 600,
+          padding: "2px 8px", borderRadius: 20,
+        }}>
+          {destination.days} nights
+        </span>
+        <div style={{ position: "absolute", bottom: 8, left: 12, right: 12 }}>
+          <p style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.2, color: "#F4845F", marginBottom: 1 }}>
+            Your Destination
+          </p>
+          <h3 style={{ fontSize: 17, fontWeight: 700, color: "white", lineHeight: 1.15, textShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
+            {destination.name}
+          </h3>
+        </div>
+      </div>
+
+      {/* Content area: tight padding, smaller text */}
+      <div style={{ padding: "10px 12px 12px" }}>
+        {/* Theme */}
+        <div className="rounded-md" style={{ background: "#FFF5F0", padding: "6px 10px", marginBottom: 8 }}>
+          <p style={{ fontSize: 9, color: "#999", marginBottom: 1 }}>Trip Theme</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#2D3436", lineHeight: 1.3 }}>
+            {destination.theme}
+          </p>
+        </div>
+
+        {/* Climate + Cost side by side */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <div className="rounded-md" style={{ flex: 1, background: "#F0FAFA", padding: "5px 8px" }}>
+            <p style={{ fontSize: 9, color: "#999", marginBottom: 1 }}>Climate</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#0D7377" }}>{destination.climate}</p>
+            <p style={{ fontSize: 10, color: "#666" }}>{destination.tempRange}</p>
+          </div>
+          <div className="rounded-md" style={{ flex: 1, background: "#FFF8F5", padding: "5px 8px" }}>
+            <p style={{ fontSize: 9, color: "#999", marginBottom: 1 }}>Est. Cost / person</p>
+            <p style={{ fontSize: 11, fontWeight: 600, color: "#E17055" }}>{destination.costRange}</p>
+            <p style={{ fontSize: 10, color: "#666" }}>Flights + hotel + activities</p>
+          </div>
+        </div>
+
+        {/* Included items: single row */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 10 }}>
+          {[
+            { icon: "\u2708\uFE0F", label: "Flights" },
+            { icon: "\uD83C\uDFE8", label: "Hotel" },
+            { icon: "\uD83C\uDFAF", label: "Activities" },
+            { icon: "\uD83D\uDE97", label: "Transport" },
+          ].map((item) => (
+            <span
+              key={item.label}
+              style={{
+                fontSize: 10, color: "#666", background: "#f5f5f3",
+                padding: "2px 6px", borderRadius: 5, display: "inline-flex",
+                alignItems: "center", gap: 3,
+              }}
+            >
+              <span style={{ fontSize: 11 }}>{item.icon}</span>
+              {item.label}
+            </span>
+          ))}
+        </div>
+
+        {/* Buttons */}
+        <div style={{ display: "flex", gap: 6 }}>
+          <button
+            onClick={onBook}
+            style={{
+            flex: 1, background: "#0D7377", color: "white", fontWeight: 600,
+            padding: "8px 0", borderRadius: 10,
+            fontSize: 12, border: "none", cursor: "pointer",
+          }}>
+            Book This Trip
+          </button>
+          <button style={{
+            padding: "8px 14px",
+            border: "1px solid #e0e0e0", color: "#666",
+            borderRadius: 10, fontSize: 12,
+            background: "white", cursor: "pointer",
+          }}>
+            Details
+          </button>
+        </div>
+
+      </div>
+    </>
+  );
+}
+
+// ---- Smooth cubic ease-out for genie feel ----
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+// ---- DESKTOP: Trip card with genie from pin head ----
+// The card's bottom-left corner is anchored just above the map pin.
+// It expands upward and to the right like a genie emerging from the pin,
+// and collapses back into the pin the same way.
+function DesktopTripCard({
+  destination,
+  pinScreenPos,
+  isVisible,
+  onBook,
+}: {
+  destination: GlobeDestination;
+  pinScreenPos: { x: number; y: number } | null;
+  onBook?: () => void;
+  isVisible: boolean;
+}) {
+  const [genieProgress, setGenieProgress] = useState(0);
+  const animFrameRef = useRef<number>(0);
+  const targetProgress = useRef(0);
+  const lastScrollY = useRef(0);
+  const collapseAnchor = useRef(0);
+  const expandAnchor = useRef(0);
+  const scrollDir = useRef<"down" | "up">("down");
+
+  useEffect(() => {
+    const animate = () => {
+      setGenieProgress((prev) => {
+        const diff = targetProgress.current - prev;
+        if (Math.abs(diff) < 0.005) return targetProgress.current;
+        return prev + diff * 0.3;
+      });
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible) {
+      targetProgress.current = 0;
+      return;
+    }
+    targetProgress.current = 1;
+    lastScrollY.current = window.scrollY;
+    collapseAnchor.current = window.scrollY;
+    expandAnchor.current = window.scrollY;
+    scrollDir.current = "down";
+
+    const scrollRange = 120;
+
+    const handleScroll = () => {
+      const sy = window.scrollY;
+      const newDir = sy > lastScrollY.current ? "down" : "up";
+
+      if (newDir !== scrollDir.current) {
+        if (newDir === "down") {
+          collapseAnchor.current = sy;
+        } else {
+          expandAnchor.current = sy;
+        }
+        scrollDir.current = newDir;
+      }
+
+      if (newDir === "down") {
+        const dist = sy - collapseAnchor.current;
+        targetProgress.current = Math.max(0, 1 - dist / scrollRange);
+      } else {
+        const dist = expandAnchor.current - sy;
+        targetProgress.current = Math.min(1, dist / scrollRange);
+      }
+
+      lastScrollY.current = sy;
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isVisible]);
+
+  if (!destination || !pinScreenPos) return null;
+
+  const cardW = 340;
+  const navH = 72;
+  const pinBuffer = 10; // Gap between card bottom-left and pin center
+
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+
+  // The card's bottom-left corner sits just above the pin head.
+  // "left" = pin x (nudged right slightly so corner doesn't sit on pin center)
+  // "bottom edge" = pinY - pinBuffer, so "top" = pinY - pinBuffer - cardRenderedHeight
+  // But since we use transformOrigin: bottom left and let the card grow upward,
+  // we position the element so its bottom-left corner is at the pin anchor point.
+  //
+  // CSS approach: position the card with its LEFT at the pin x + buffer,
+  // and its BOTTOM at the pin y - buffer. We use "bottom" via calculated top.
+
+  const anchorLeft = pinScreenPos.x + pinBuffer;
+  // Clamp so card doesn't overflow right edge
+  const clampedLeft = Math.min(anchorLeft, vw - cardW - 12);
+  const finalLeft = Math.max(12, clampedLeft);
+
+  // The anchor bottom is just above the pin
+  const anchorBottom = pinScreenPos.y - pinBuffer;
+
+  const p = easeOutCubic(genieProgress);
+  const rawP = genieProgress;
+
+  const scale = Math.max(p, 0.001);
+  const opacity = Math.min(rawP * 3, 1);
+  // Genie distortion: slight horizontal squeeze and vertical stretch when small
+  const scaleY = 0.65 + p * 0.35;
+  const skewX = (1 - p) * -3;
+  const isShowing = rawP > 0.01;
+
+  return isShowing ? (
+    <div
+      style={{
+        position: "fixed",
+        left: `${finalLeft}px`,
+        // Bottom edge of card sits at anchorBottom (just above pin)
+        bottom: `${(typeof window !== "undefined" ? window.innerHeight : 800) - anchorBottom}px`,
+        width: `${cardW}px`,
+        zIndex: 60,
+        transformOrigin: "0% 100%",
+        transform: `scale(${scale}) scaleY(${scaleY}) skewX(${skewX}deg)`,
+        opacity,
+        pointerEvents: rawP > 0.8 ? "auto" : "none",
+        willChange: "transform, opacity",
+      }}
+    >
+      <div
+        className="backdrop-blur-sm rounded-2xl border border-teal-100/30 relative overflow-hidden"
+        style={{
+          background: "rgba(255,255,255,0.97)",
+          boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.18 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
+        }}
+      >
+        <CardBody destination={destination} isMobile={false} onBook={onBook} />
+      </div>
+    </div>
+  ) : null;
+}
+
+// ---- MOBILE: Full-screen modal card with genie from pin head (center origin) ----
+// At p=0 the card is a tiny point at the pin head. At p=1 it fills the screen.
+// The card translates from the pin position to screen center as it scales up.
+function MobileTripCard({
   destination,
   pinScreenPos,
   isVisible,
   onDismiss,
+  onBook,
 }: {
   destination: GlobeDestination;
   pinScreenPos: { x: number; y: number } | null;
   isVisible: boolean;
   onDismiss: () => void;
+  onBook?: () => void;
 }) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  // "collapsed" means the card genied into pin due to scroll, but can reappear on scroll-to-top
-  const [collapsed, setCollapsed] = useState(false);
-  // "dismissed" means user clicked outside or spun again - card gone for good until next spin
-  const dismissedByClick = useRef(false);
+  const [genieProgress, setGenieProgress] = useState(0);
+  const animFrameRef = useRef<number>(0);
+  const targetProgress = useRef(0);
+  const lastScrollY = useRef(0);
+  const collapseAnchor = useRef(0);
+  const expandAnchor = useRef(0);
+  const scrollDir = useRef<"down" | "up">("down");
 
-  // Track whether card should show based on scroll position
   useEffect(() => {
-    if (typeof window === "undefined" || !isVisible) return;
+    const animate = () => {
+      setGenieProgress((prev) => {
+        const diff = targetProgress.current - prev;
+        if (Math.abs(diff) < 0.003) return targetProgress.current;
+        return prev + diff * 0.3;
+      });
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
 
-    dismissedByClick.current = false;
-    setCollapsed(false);
+  useEffect(() => {
+    if (!isVisible) {
+      targetProgress.current = 0;
+      return;
+    }
+    targetProgress.current = 1;
+    lastScrollY.current = window.scrollY;
+    collapseAnchor.current = window.scrollY;
+    expandAnchor.current = window.scrollY;
+    scrollDir.current = "down";
+
+    const scrollRange = 120;
 
     const handleScroll = () => {
-      if (dismissedByClick.current) return;
+      const sy = window.scrollY;
+      const newDir = sy > lastScrollY.current ? "down" : "up";
 
-      // If user scrolled past top area, collapse card into pin
-      if (window.scrollY > 50) {
-        setCollapsed(true);
-      } else {
-        // User scrolled back to top, genie card back out of pin
-        setCollapsed(false);
-      }
-    };
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
-        const spinBtn = document.getElementById("spin-btn");
-        if (!spinBtn || !spinBtn.contains(e.target as Node)) {
-          dismissedByClick.current = true;
-          onDismiss();
+      if (newDir !== scrollDir.current) {
+        if (newDir === "down") {
+          collapseAnchor.current = sy;
+        } else {
+          expandAnchor.current = sy;
         }
+        scrollDir.current = newDir;
       }
+
+      if (newDir === "down") {
+        const dist = sy - collapseAnchor.current;
+        targetProgress.current = Math.max(0, 1 - dist / scrollRange);
+      } else {
+        const dist = expandAnchor.current - sy;
+        targetProgress.current = Math.min(1, dist / scrollRange);
+      }
+
+      lastScrollY.current = sy;
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    document.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isVisible]);
 
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      document.removeEventListener("click", handleClickOutside);
-    };
-  }, [isVisible, onDismiss]);
+  if (!destination || !pinScreenPos) return null;
 
-  if (!destination) return null;
+  const rawP = genieProgress;
+  const p = easeOutCubic(rawP);
+  const isShowing = isVisible || rawP > 0.01;
 
-  // Position card above and to the right of the pin (matching demo behavior)
-  const cardW = 320;
-  const cardH = 340;
-  const offsetX = -10;
-  const offsetY = 18;
-  let cardLeft = pinScreenPos ? pinScreenPos.x + offsetX : -9999;
-  let cardTop = pinScreenPos ? pinScreenPos.y - cardH - offsetY : -9999;
+  // Final card rect (below navbar, with margins)
+  const vw = typeof window !== "undefined" ? window.innerWidth : 375;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 700;
+  const hMargin = Math.round(vw * 0.05);
+  const navH = 72;
+  const cardPad = 8;
+  const minTop = navH + cardPad;
+  const topMargin = minTop + Math.round((vh - navH) * 0.03);
+  const bottomMargin = Math.round(vh * 0.05);
 
-  // Keep card within viewport
-  if (typeof window !== "undefined" && pinScreenPos) {
-    const navHeight = 60;
-    const vw = window.innerWidth;
-    if (cardLeft + cardW > vw - 12) cardLeft = vw - cardW - 12;
-    if (cardLeft < 12) cardLeft = 12;
-    if (cardTop < navHeight) cardTop = navHeight;
-  }
+  const finalW = vw - hMargin * 2;
+  const finalH = vh - topMargin - bottomMargin;
+  const finalLeft = hMargin;
+  const finalTop = topMargin;
 
-  // Connector line endpoints: from card bottom-left stem to pin
-  const stemX = cardLeft + 24;
-  const stemY = cardTop + cardH + 8;
+  // Pin position (where card collapses to)
+  const pinX = pinScreenPos.x;
+  const pinY = pinScreenPos.y;
 
-  // Card is "showing" when visible AND not collapsed AND not permanently dismissed
-  const showing = isVisible && !collapsed;
+  // transformOrigin points at the pin's offset within the card bounds
+  const originX = pinX - finalLeft;
+  const originY = pinY - finalTop;
+
+  const scale = Math.max(p, 0.001);
+  const scaleY = 0.7 + p * 0.3;
+  const opacity = Math.min(rawP * 2.5, 1);
 
   return (
     <>
-      {/* Genie animation styles */}
-      <style>{`
-        .trip-card-genie {
-          transform-origin: bottom left;
-          transition: opacity 0.35s ease-out, transform 0.35s ease-out;
-        }
-        .trip-card-genie.showing {
-          opacity: 1;
-          transform: translateY(0) scale(1);
-          pointer-events: auto;
-        }
-        .trip-card-genie.collapsed {
-          opacity: 0;
-          transform: scale(0) translateY(20px);
-          pointer-events: none;
-        }
-        .trip-card-genie.hidden {
-          opacity: 0;
-          transform: translateY(10px) scale(0.95);
-          pointer-events: none;
-        }
-        .trip-card-stem::before {
-          content: '';
-          position: absolute;
-          bottom: -8px;
-          left: 16px;
-          width: 16px;
-          height: 16px;
-          background: rgba(255,255,255,0.97);
-          border-right: 1px solid rgba(178,228,230,0.3);
-          border-bottom: 1px solid rgba(178,228,230,0.3);
-          transform: rotate(45deg);
-          box-shadow: 4px 4px 8px rgba(0,0,0,0.06);
-        }
-        .connector-line {
-          transition: opacity 0.35s ease-out;
-        }
-      `}</style>
-
-      <div
-        ref={cardRef}
-        className={`fixed trip-card-genie ${
-          showing ? "showing" : collapsed ? "collapsed" : "hidden"
-        }`}
-        style={{
-          left: `${cardLeft}px`,
-          top: `${cardTop}px`,
-          width: `${cardW}px`,
-          zIndex: 50,
-        }}
-      >
-        <div className="trip-card-stem bg-white/97 backdrop-blur-sm rounded-2xl shadow-xl border border-teal-100/30 p-6 relative"
-          style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(178,228,230,0.3)" }}>
-          {/* Destination header */}
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: "#F4845F" }}>
-                Your Destination
-              </p>
-              <h3 className="text-2xl font-bold text-gray-900 leading-tight">
-                {destination.name}
-              </h3>
-            </div>
-            <span className="text-white text-xs font-semibold px-3 py-1 rounded-full" style={{ background: "#0D7377" }}>
-              {destination.days} nights
-            </span>
-          </div>
-
-          {/* Trip theme */}
-          <div className="rounded-lg px-4 py-3 mb-4" style={{ background: "#FFF5F0" }}>
-            <p className="text-xs text-gray-500 mb-0.5">Trip Theme</p>
-            <p className="text-base font-semibold text-gray-900">
-              {destination.theme}
-            </p>
-          </div>
-
-          {/* Package includes */}
-          <div className="space-y-2 mb-5">
-            {[
-              { icon: "\u2708\uFE0F", label: "Round-trip flights included" },
-              { icon: "\uD83C\uDFE8", label: "4-star hotel, free cancellation" },
-              { icon: "\uD83C\uDFAF", label: "Curated activities & dining" },
-              { icon: "\uD83D\uDE97", label: "Ground transportation arranged" },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2 text-sm text-gray-600">
-                <span className="text-base">{item.icon}</span>
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* CTA buttons */}
-          <div className="flex gap-3">
-            <button className="flex-1 text-white font-semibold py-2.5 rounded-xl text-sm cursor-pointer transition-colors" style={{ background: "#0D7377" }}>
-              Book This Trip
-            </button>
-            <button className="px-4 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm cursor-pointer transition-colors hover:border-teal-400">
-              Details
-            </button>
-          </div>
-
-          <p className="text-xs text-gray-400 text-center mt-3">
-            Demo preview. Real trips coming soon.
-          </p>
-        </div>
-      </div>
-
-      {/* SVG connector line from card stem to pin */}
-      {pinScreenPos && (
-        <svg
-          className="connector-line"
+      {/* Backdrop */}
+      {isShowing && (
+        <div
           style={{
             position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            pointerEvents: "none",
-            zIndex: 40,
-            opacity: showing ? 1 : 0,
+            inset: 0,
+            zIndex: 59,
+            background: `rgba(0,0,0,${0.25 * p})`,
+            pointerEvents: rawP > 0.5 ? "auto" : "none",
+          }}
+          onClick={onDismiss}
+        />
+      )}
+
+      {isShowing && (
+        <div
+          style={{
+            position: "fixed",
+            left: `${finalLeft}px`,
+            top: `${finalTop}px`,
+            width: `${finalW}px`,
+            height: `${finalH}px`,
+            zIndex: 60,
+            transformOrigin: `${originX}px ${originY}px`,
+            transform: `scale(${scale}) scaleY(${scaleY})`,
+            opacity,
+            pointerEvents: rawP > 0.8 ? "auto" : "none",
+            willChange: "transform, opacity",
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          <line
-            x1={stemX}
-            y1={stemY}
-            x2={pinScreenPos.x}
-            y2={pinScreenPos.y}
-            stroke="#F4845F"
-            strokeWidth={2}
-            strokeDasharray="5,5"
-            opacity={0.6}
-          />
-        </svg>
+          <div
+            className="rounded-2xl border border-teal-100/30 relative overflow-hidden flex-1 flex flex-col"
+            style={{
+              background: "rgba(255,255,255,0.97)",
+              boxShadow: `0 ${20 * p}px ${60 * p}px rgba(0,0,0,${0.2 * p}), 0 0 0 1px rgba(178,228,230,0.3)`,
+            }}
+          >
+            <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+              <CardBody destination={destination} isMobile={true} onBook={onBook} />
+            </div>
+          </div>
+        </div>
       )}
     </>
   );
@@ -590,12 +997,32 @@ function TripCard({
 
 // ---- Main exported component ----
 export default function Globe({ onDestinationRevealed }: GlobeProps) {
+  const router = useRouter();
   const [isSpinning, setIsSpinning] = useState(false);
   const [hasSpun, setHasSpun] = useState(false);
   const [showCard, setShowCard] = useState(false);
   const [cardPosition, setCardPosition] = useState<{ x: number; y: number } | null>(null);
+  const isMobile = useIsMobile();
+  const travelDna = useRef<TravelDNA | null>(null);
 
-  // Mutable refs for animation state
+  // Fetch Travel DNA once on mount (non-blocking, silent fail for logged-out users)
+  useEffect(() => {
+    getActiveTravelDNA()
+      .then(dna => {
+        if (dna) {
+          travelDna.current = {
+            adventure: dna.adventure ?? 0,
+            cultural: dna.cultural ?? 0,
+            budget: dna.budget ?? 0,
+            social: dna.social ?? 0,
+            energy: dna.energy ?? 0,
+            structure: dna.structure ?? 0,
+          };
+        }
+      })
+      .catch(() => {}); // no-op: user might not be logged in
+  }, []);
+
   const spinSpeed = useRef(0);
   const spinAxis = useRef(new THREE.Vector3(0, 1, 0));
   const targetQuaternion = useRef<THREE.Quaternion | null>(null);
@@ -625,7 +1052,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
     pinRef.current!.visible = false;
     pinRef.current!.scale.set(0, 0, 0);
 
-    // Random spin axis with lateral tilt for multilateral movement
     spinAxis.current = new THREE.Vector3(
       (Math.random() - 0.5) * 0.6,
       1,
@@ -641,12 +1067,10 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
 
   const handleSpinComplete = useCallback(() => {
     setIsSpinning(false);
-    const dest =
-      DEMO_DESTINATIONS[Math.floor(Math.random() * DEMO_DESTINATIONS.length)];
+    const dest = pickWeightedDestination(travelDna.current);
     destination.current = dest;
 
     if (pinRef.current && cameraRef.current) {
-      // Position pin at destination coordinates
       const phi = (90 - dest.lat) * (Math.PI / 180);
       const theta = (dest.lng + 180) * (Math.PI / 180);
       const r = 1.03;
@@ -655,7 +1079,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
       const pz = r * Math.sin(phi) * Math.sin(theta);
       pinRef.current.position.set(px, py, pz);
 
-      // Orient pin to stick radially outward from globe
       const normal = new THREE.Vector3(px, py, pz).normalize();
       const defaultUp = new THREE.Vector3(0, 1, 0);
       pinRef.current.quaternion.setFromUnitVectors(defaultUp, normal);
@@ -663,8 +1086,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
       pinRef.current.visible = true;
       pinRef.current.scale.set(0, 0, 0);
 
-      // Compute target quaternion to center pin toward camera
-      // Pin is now a child of globeRef (the mesh), so use globeRef quaternion
       const globeMesh = globeRef.current!;
       const worldDest = normal.clone().applyQuaternion(globeMesh.quaternion);
       const cameraDir = new THREE.Vector3(0, 0, 1);
@@ -672,7 +1093,6 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
       targetQuaternion.current = rotateToFace.multiply(globeMesh.quaternion.clone());
       isAutoRotatingRef.current = true;
 
-      // Show card after auto-rotate settles
       setTimeout(() => {
         setShowCard(true);
       }, 600);
@@ -691,60 +1111,88 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
     isLandedRef.current = false;
   }, []);
 
-  return (
-    <div className="relative w-full h-full">
-      <Canvas
-        camera={{ position: [0, 0, 3], fov: 45 }}
-        className="globe-canvas"
-        style={{ background: "transparent" }}
-      >
-        <CameraCapture cameraRef={cameraRef} />
-        <ambientLight intensity={0.35} />
-        <directionalLight position={[5, 2, 4]} intensity={1.2} color="#ffffff" />
-        <directionalLight position={[-4, -1, -3]} intensity={0.2} color="#88ccff" />
-        <pointLight position={[-2, 1, 4]} intensity={0.1} color="#F4845F" />
+  const handleBookTrip = useCallback(() => {
+    const dest = destination.current;
+    if (!dest) return;
+    const url = `/trip/new?destination=${dest.id}`;
+    router.push(url);
+  }, [router]);
 
-        <Suspense fallback={null}>
-          <Earth
-            onPinReady={handlePinReady}
-            onSpinComplete={handleSpinComplete}
-            spinSpeed={spinSpeed}
-            spinAxis={spinAxis}
-            targetQuaternion={targetQuaternion}
+  return (
+    <div className="relative w-full h-full flex flex-col">
+      {/* Globe canvas - fills available space, vertically centered */}
+      <div className="flex-1 relative">
+        <Canvas
+          camera={{ position: [0, 0, isMobile ? 3.15 : 3], fov: 45 }}
+          className="globe-canvas"
+          style={{
+            background: "transparent",
+            touchAction: "pan-y",
+          }}
+        >
+          <CameraCapture cameraRef={cameraRef} />
+          <ambientLight intensity={0.9} />
+          <directionalLight position={[5, 2, 4]} intensity={1.8} color="#ffffff" />
+          <directionalLight position={[-4, -1, -3]} intensity={0.6} color="#aaddff" />
+          <pointLight position={[-2, 1, 4]} intensity={0.3} color="#F4845F" />
+          <directionalLight position={[0, 0, 5]} intensity={0.5} color="#ffffff" />
+
+          <Suspense fallback={null}>
+            <Earth
+              onPinReady={handlePinReady}
+              onSpinComplete={handleSpinComplete}
+              spinSpeed={spinSpeed}
+              spinAxis={spinAxis}
+              targetQuaternion={targetQuaternion}
+              isSpinning={isSpinningRef}
+              isAutoRotating={isAutoRotatingRef}
+              isLanded={isLandedRef}
+              destination={destination}
+              globeRef={globeRef}
+            />
+          </Suspense>
+          <Particles />
+          <CanvasInteraction
             isSpinning={isSpinningRef}
             isAutoRotating={isAutoRotatingRef}
             isLanded={isLandedRef}
-            destination={destination}
             globeRef={globeRef}
+            isMobile={isMobile}
           />
-        </Suspense>
-        <Particles />
-        <CanvasInteraction
-          isSpinning={isSpinningRef}
-          isAutoRotating={isAutoRotatingRef}
-          isLanded={isLandedRef}
-          globeRef={globeRef}
-        />
-        <CardPositionTracker
-          pinRef={pinRef}
-          cameraRef={cameraRef}
-          showCard={showCard}
-          onPositionUpdate={handlePositionUpdate}
-        />
-      </Canvas>
+          <CardPositionTracker
+            pinRef={pinRef}
+            cameraRef={cameraRef}
+            showCard={showCard}
+            onPositionUpdate={handlePositionUpdate}
+          />
+        </Canvas>
+      </div>
 
-      {/* Trip card overlay */}
-      <TripCard
-        destination={destination.current}
-        pinScreenPos={cardPosition}
-        isVisible={showCard}
-        onDismiss={handleDismissCard}
-      />
+      {/* Trip card: portal to body so it escapes any parent stacking context */}
+      {typeof document !== "undefined" && createPortal(
+        isMobile ? (
+          <MobileTripCard
+            destination={destination.current}
+            pinScreenPos={cardPosition}
+            isVisible={showCard}
+            onDismiss={handleDismissCard}
+            onBook={handleBookTrip}
+          />
+        ) : (
+          <DesktopTripCard
+            destination={destination.current}
+            pinScreenPos={cardPosition}
+            isVisible={showCard}
+            onBook={handleBookTrip}
+          />
+        ),
+        document.body
+      )}
 
-      {/* Spin button overlay */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
+      {/* Spin button overlay - sits at bottom of the container */}
+      <div className="flex flex-col items-center gap-2 sm:gap-3 pb-3 sm:pb-6 pt-1">
         {!hasSpun && !isSpinning && (
-          <p className="text-sm text-teal-light/80 animate-pulse">
+          <p className="text-xs sm:text-sm text-teal-light/80 animate-pulse text-center px-4">
             Spin the globe to discover your trip
           </p>
         )}
@@ -753,7 +1201,7 @@ export default function Globe({ onDestinationRevealed }: GlobeProps) {
           onClick={handleSpin}
           disabled={isSpinning}
           className={`
-            px-8 py-3 rounded-full font-semibold text-white text-lg
+            px-6 sm:px-8 py-2.5 sm:py-3 rounded-full font-semibold text-white text-base sm:text-lg
             transition-all duration-300 cursor-pointer
             ${
               isSpinning

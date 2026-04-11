@@ -20,6 +20,8 @@ export type TravelDNAResult = {
   completedAt: string;
 };
 
+export type TravelMode = "flights-included" | "arrange-own-flights" | "road-trip";
+
 export type TripRequest = {
   id?: string;
   userId?: string;
@@ -30,6 +32,7 @@ export type TripRequest = {
   partySize: number;
   partyType: "solo" | "couple" | "small-group" | "group";
   departureCity: string;
+  travelMode: TravelMode;
   constraints: {
     dietary: string[];
     mobility: string[];
@@ -88,6 +91,7 @@ export type TravelDNAQuestion = {
   optionA: {
     label: string;
     emoji: string;
+    image: string;
     gradientFrom: string;
     gradientTo: string;
     value: number;
@@ -95,6 +99,7 @@ export type TravelDNAQuestion = {
   optionB: {
     label: string;
     emoji: string;
+    image: string;
     gradientFrom: string;
     gradientTo: string;
     value: number;

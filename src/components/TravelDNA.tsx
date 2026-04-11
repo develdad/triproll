@@ -18,6 +18,8 @@ export default function TravelDNA() {
     energy: 0,
   });
   const [isComplete, setIsComplete] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const question = TRAVEL_DNA_QUESTIONS[currentQuestion];
   const progress = ((currentQuestion + 1) / TRAVEL_DNA_QUESTIONS.length) * 100;
@@ -119,26 +121,38 @@ export default function TravelDNA() {
                 </div>
               </div>
 
+              {/* Error message */}
+              {saveError && (
+                <div className="mb-4 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                  {saveError}
+                </div>
+              )}
+
               {/* CTA */}
               <button
+                disabled={isSaving}
                 onClick={async () => {
-                  // Persist to database via server action
-                  const result = await saveTravelDNA({ ...axes, archetype });
-                  // Also store in session storage as fallback
-                  sessionStorage.setItem(
-                    "travelDNA",
-                    JSON.stringify({
-                      id: result.data?.id,
-                      axes,
-                      archetype,
-                      completedAt: new Date().toISOString(),
-                    })
-                  );
-                  router.push("/trip/new");
+                  setIsSaving(true);
+                  setSaveError(null);
+
+                  try {
+                    const result = await saveTravelDNA({ ...axes, archetype });
+
+                    if (result.error) {
+                      setSaveError(result.error);
+                      setIsSaving(false);
+                      return;
+                    }
+
+                    router.push("/travel-dna/results");
+                  } catch {
+                    setSaveError("Something went wrong. Please try again.");
+                    setIsSaving(false);
+                  }
                 }}
-                className="bg-teal-deep hover:bg-ocean text-white font-semibold px-8 py-3 rounded-full transition-colors inline-block"
+                className="bg-teal-deep hover:bg-ocean disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold px-8 py-3 rounded-full transition-colors inline-block"
               >
-                Continue to Trip Details
+                {isSaving ? "Saving..." : "See Your Results"}
               </button>
             </div>
           </div>
@@ -187,41 +201,77 @@ export default function TravelDNA() {
       {/* Question Container */}
       <div className="flex-1 flex items-center justify-center px-6 pb-12">
         <div className="max-w-3xl w-full">
-          <h2 className="text-2xl sm:text-3xl font-semibold text-charcoal text-center mb-12">
+          <h2 className="text-2xl sm:text-3xl font-semibold text-charcoal text-center mb-10">
             {question.question}
           </h2>
 
-          {/* Options Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {/* "or" divider text for mobile (between stacked cards) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
             {/* Option A */}
             <button
               onClick={() => handleChoice(question.optionA.value)}
-              className={`group relative rounded-2xl overflow-hidden h-48 sm:h-56 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-deep`}
+              className="group relative rounded-2xl overflow-hidden h-56 sm:h-64 cursor-pointer transition-all duration-300 hover:shadow-2xl hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-deep"
             >
-              <div
-                className={`absolute inset-0 bg-gradient-to-br ${question.optionA.gradientFrom} ${question.optionA.gradientTo} flex flex-col items-center justify-center p-6 text-white group-hover:shadow-lg transition-all`}
-              >
-                <div className="text-5xl mb-3">{question.optionA.emoji}</div>
-                <div className="text-lg sm:text-xl font-semibold text-center">
+              {/* Photo background */}
+              <img
+                src={question.optionA.image}
+                alt={question.optionA.label}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+              />
+              {/* Dark gradient overlay for text readability */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+              {/* Teal tint on hover */}
+              <div className="absolute inset-0 bg-teal-deep/0 group-hover:bg-teal-deep/20 transition-colors duration-300" />
+              {/* Content */}
+              <div className="absolute inset-0 flex flex-col items-center justify-end p-6 text-white">
+                <span className="text-4xl mb-2 drop-shadow-lg">{question.optionA.emoji}</span>
+                <span className="text-lg sm:text-xl font-bold text-center drop-shadow-lg leading-tight">
                   {question.optionA.label}
-                </div>
+                </span>
               </div>
+              {/* Selection ring that appears on hover */}
+              <div className="absolute inset-0 rounded-2xl border-3 border-transparent group-hover:border-white/60 transition-colors duration-300 pointer-events-none" />
             </button>
+
+            {/* "or" pill between cards */}
+            <div className="sm:hidden flex items-center justify-center -my-2 relative z-10">
+              <span className="bg-white text-slate text-sm font-semibold px-4 py-1 rounded-full shadow-md border border-silver/30">
+                or
+              </span>
+            </div>
 
             {/* Option B */}
             <button
               onClick={() => handleChoice(question.optionB.value)}
-              className={`group relative rounded-2xl overflow-hidden h-48 sm:h-56 cursor-pointer transition-all duration-300 hover:shadow-xl hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-deep`}
+              className="group relative rounded-2xl overflow-hidden h-56 sm:h-64 cursor-pointer transition-all duration-300 hover:shadow-2xl hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-deep"
             >
-              <div
-                className={`absolute inset-0 bg-gradient-to-br ${question.optionB.gradientFrom} ${question.optionB.gradientTo} flex flex-col items-center justify-center p-6 text-white group-hover:shadow-lg transition-all`}
-              >
-                <div className="text-5xl mb-3">{question.optionB.emoji}</div>
-                <div className="text-lg sm:text-xl font-semibold text-center">
+              {/* Photo background */}
+              <img
+                src={question.optionB.image}
+                alt={question.optionB.label}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+              />
+              {/* Dark gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+              {/* Peach tint on hover */}
+              <div className="absolute inset-0 bg-peach/0 group-hover:bg-peach/20 transition-colors duration-300" />
+              {/* Content */}
+              <div className="absolute inset-0 flex flex-col items-center justify-end p-6 text-white">
+                <span className="text-4xl mb-2 drop-shadow-lg">{question.optionB.emoji}</span>
+                <span className="text-lg sm:text-xl font-bold text-center drop-shadow-lg leading-tight">
                   {question.optionB.label}
-                </div>
+                </span>
               </div>
+              {/* Selection ring */}
+              <div className="absolute inset-0 rounded-2xl border-3 border-transparent group-hover:border-white/60 transition-colors duration-300 pointer-events-none" />
             </button>
+          </div>
+
+          {/* Desktop "or" divider (centered between the two cards) */}
+          <div className="hidden sm:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none" style={{ display: "none" }}>
+            <span className="bg-white text-slate text-sm font-semibold px-3 py-1 rounded-full shadow-md">
+              or
+            </span>
           </div>
         </div>
       </div>

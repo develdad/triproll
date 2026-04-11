@@ -1,21 +1,33 @@
 "use client";
 
 import { useState, FormEvent } from "react";
+import { joinWaitlist } from "@/app/actions";
 
 export default function WaitlistForm() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!email) return;
 
     setLoading(true);
+    setError(null);
 
-    // TODO: Connect to real backend / Supabase / email service
-    // For now, simulate a short delay
-    await new Promise((r) => setTimeout(r, 800));
+    const result = await joinWaitlist(email);
+
+    if (result.error) {
+      if (result.error.includes("already")) {
+        // Treat "already on list" as success, not an error
+        setSubmitted(true);
+      } else {
+        setError(result.error);
+      }
+      setLoading(false);
+      return;
+    }
 
     setSubmitted(true);
     setLoading(false);
@@ -64,6 +76,9 @@ export default function WaitlistForm() {
       >
         {loading ? "Joining..." : "Join the Waitlist"}
       </button>
+      {error && (
+        <p className="text-coral text-sm mt-2 text-center sm:text-left">{error}</p>
+      )}
     </form>
   );
 }

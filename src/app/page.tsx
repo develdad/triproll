@@ -30,14 +30,14 @@ export default function Home() {
       <Navbar />
 
       {/* ---- Hero Section ---- */}
-      <section className="relative flex-1 min-h-screen flex items-center pt-16">
+      <section className="relative min-h-screen flex items-center pt-16 lg:pt-16">
         {/* Gradient background */}
         <div className="absolute inset-0 bg-gradient-to-br from-ocean via-teal-deep to-charcoal" />
 
         {/* Content grid */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8 items-center">
-          {/* Left: Copy */}
-          <div className="flex flex-col gap-6 text-center lg:text-left py-4 sm:py-8 lg:py-0">
+        <div className="relative z-10 max-w-7xl mx-auto px-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-0 lg:gap-8 items-center">
+          {/* Left: Copy -- on mobile this is the full above-the-fold view */}
+          <div className="flex flex-col gap-6 text-center lg:text-left min-h-[calc(100svh-80px)] lg:min-h-0 justify-center py-8 lg:py-0">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display text-white leading-tight">
               Spin the Globe.
               <br />
@@ -49,13 +49,13 @@ export default function Home() {
             </p>
 
             {/* Value props */}
-            <div className="flex flex-col sm:flex-row gap-4 text-sm text-white/80">
+            <div className="flex flex-col sm:flex-row gap-4 text-sm text-white/80 justify-center lg:justify-start">
               {[
                 { icon: "\u{1F30D}", text: "Complete trip packages" },
                 { icon: "\u{1F4B0}", text: "Stay within budget" },
                 { icon: "\u26A1", text: "Book in minutes" },
               ].map((item) => (
-                <div key={item.text} className="flex items-center gap-2">
+                <div key={item.text} className="flex items-center gap-2 justify-center lg:justify-start">
                   <span>{item.icon}</span>
                   <span>{item.text}</span>
                 </div>
@@ -66,10 +66,18 @@ export default function Home() {
             <div className="mt-2">
               <WaitlistForm />
             </div>
+
+            {/* Scroll hint -- mobile only */}
+            <div className="lg:hidden flex flex-col items-center mt-4 animate-bounce">
+              <span className="text-white/50 text-xs tracking-wide uppercase mb-1">Try the globe</span>
+              <svg className="w-5 h-5 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
 
-          {/* Right: Globe (card is rendered internally, positioned relative to pin) */}
-          <div className="relative h-[440px] sm:h-[550px] lg:h-[600px]">
+          {/* Right: Globe -- on mobile this sits below the fold as its own section */}
+          <div className="relative h-[500px] sm:h-[550px] lg:h-[600px] pb-8 lg:pb-0">
             <Globe onDestinationRevealed={handleDestinationRevealed} />
           </div>
         </div>

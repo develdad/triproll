@@ -2,9 +2,20 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ALL_DESTINATIONS, BUDGET_RANGES, COMMON_DEPARTING_CITIES, CONSTRAINTS_OPTIONS } from "@/lib/constants";
+import {
+  ALL_DESTINATIONS,
+  BUDGET_RANGES,
+  COMMON_DEPARTING_CITIES,
+  CONSTRAINTS_OPTIONS,
+  MIN_BOOKING_LEAD_DAYS,
+  MAX_BOOKING_HORIZON_DAYS,
+  MIN_TRIP_NIGHTS,
+  MAX_TRIP_NIGHTS,
+  bookingDateBound,
+} from "@/lib/constants";
 import type { TripRequest, TravelMode } from "@/lib/types";
 import { saveTripRequest, getActiveTravelDNA, generateTrip } from "@/app/actions";
+import { US_STATES, isResidencyBlocked, blockedStateMessage } from "@/lib/geofence";
 
 export default function TripQuestionnaire({
   lockedDestinationId,
@@ -50,23 +61,69 @@ export default function TripQuestionnaire({
   ];
 
   const [dateError, setDateError] = useState<string | null>(null);
+  const [residencyState, setResidencyState] = useState("");
+  const [geoError, setGeoError] = useState<string | null>(null);
+
+  // Computed date boundaries (recalculated each render so they stay current)
+  const minDepartureDate = bookingDateBound(MIN_BOOKING_LEAD_DAYS);
+  const maxDepartureDate = bookingDateBound(MAX_BOOKING_HORIZON_DAYS);
 
   const handleDateChange = (field: "departureDate" | "returnDate", value: string) => {
     setDateError(null);
     setFormData((prev) => {
       const updated = { ...prev, [field]: value };
+      const { departureDate, returnDate } = updated;
 
-      // Validate: return date must be after departure date
-      if (updated.departureDate && updated.returnDate) {
-        const dep = new Date(updated.departureDate);
-        const ret = new Date(updated.returnDate);
+      // ── Departure-date boundary checks ──
+      if (departureDate) {
+        if (departureDate < minDepartureDate) {
+          setDateError("Departure date must be at least tomorrow. Same-day bookings aren't supported.");
+          return updated;
+        }
+        if (departureDate > maxDepartureDate) {
+          const months = Math.round(MAX_BOOKING_HORIZON_DAYS / 30);
+          setDateError(
+            `Airlines and hotels only open bookings ~${months} months out. Pick a departure date before ${new Date(maxDepartureDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+          );
+          return updated;
+        }
+      }
+
+      // ── Return-date checks (only when both dates present) ──
+      if (departureDate && returnDate) {
+        const dep = new Date(departureDate);
+        const ret = new Date(returnDate);
+
         if (ret <= dep) {
           setDateError("Return date must be after your departure date.");
-        } else {
-          const days = Math.ceil((ret.getTime() - dep.getTime()) / (1000 * 60 * 60 * 24));
-          if (days < 2) {
-            setDateError("Trips must be at least 2 nights. Even a quick getaway needs a little breathing room.");
-          }
+          return updated;
+        }
+
+        const nights = Math.ceil(
+          (ret.getTime() - dep.getTime()) / (1000 * 60 * 60 * 24)
+        );
+
+        if (nights < MIN_TRIP_NIGHTS) {
+          setDateError(
+            `Trips must be at least ${MIN_TRIP_NIGHTS} nights. Even a quick getaway needs a little breathing room.`
+          );
+          return updated;
+        }
+
+        if (nights > MAX_TRIP_NIGHTS) {
+          setDateError(
+            `Trips can be up to ${MAX_TRIP_NIGHTS} nights. For longer stays, consider splitting into multiple bookings.`
+          );
+          return updated;
+        }
+
+        // Ensure the return date itself doesn't exceed the booking horizon
+        const maxReturnDate = bookingDateBound(MAX_BOOKING_HORIZON_DAYS + MAX_TRIP_NIGHTS);
+        if (returnDate > maxReturnDate) {
+          setDateError(
+            `Your return date falls outside the booking window. The latest possible return is ${new Date(maxReturnDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+          );
+          return updated;
         }
       }
 
@@ -129,6 +186,7 @@ export default function TripQuestionnaire({
         partySize: formData.partySize,
         partyType: formData.partyType,
         departureCity: formData.departureCity,
+        residencyState,
         constraintsDietary: formData.constraints.dietary,
         constraintsMobility: formData.constraints.mobility,
         constraintsPassport: formData.constraints.passport,
@@ -137,7 +195,15 @@ export default function TripQuestionnaire({
         mode: lockedDestination ? "playground" : "commitment",
       });
 
-      if (result.error) {
+      if ("blocked" in result && result.blocked) {
+        setGeoError(result.message ?? "TripRoll isn't available in your state yet.");
+        setSubmitError(null);
+        setSubmitted(false);
+        setStep(3);
+        return;
+      }
+
+      if ("error" in result && result.error) {
         setSubmitError(result.error);
         setSubmitted(false);
         return;
@@ -253,9 +319,14 @@ export default function TripQuestionnaire({
                 <input
                   type="date"
                   value={formData.departureDate}
+                  min={minDepartureDate}
+                  max={maxDepartureDate}
                   onChange={(e) => handleDateChange("departureDate", e.target.value)}
                   className="w-full px-4 py-3 border border-silver/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep focus:border-transparent"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Bookings available up to ~{Math.round(MAX_BOOKING_HORIZON_DAYS / 30)} months out
+                </p>
               </div>
 
               <div>
@@ -263,10 +334,14 @@ export default function TripQuestionnaire({
                 <input
                   type="date"
                   value={formData.returnDate}
-                  min={formData.departureDate || undefined}
+                  min={formData.departureDate || minDepartureDate}
+                  max={bookingDateBound(MAX_BOOKING_HORIZON_DAYS + MAX_TRIP_NIGHTS)}
                   onChange={(e) => handleDateChange("returnDate", e.target.value)}
                   className="w-full px-4 py-3 border border-silver/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep focus:border-transparent"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Maximum trip length: {MAX_TRIP_NIGHTS} nights
+                </p>
               </div>
 
               {dateError && (
@@ -362,6 +437,31 @@ export default function TripQuestionnaire({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-charcoal mb-2">
+                  What state do you live in?
+                </label>
+                <select
+                  value={residencyState}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setResidencyState(v);
+                    setGeoError(isResidencyBlocked(v) ? blockedStateMessage(v) : null);
+                  }}
+                  className="w-full px-4 py-3 border border-silver/30 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-deep focus:border-transparent bg-white"
+                >
+                  <option value="">Select your home state...</option>
+                  {US_STATES.map((s) => (
+                    <option key={s.code} value={s.code}>{s.name}</option>
+                  ))}
+                </select>
+                {geoError && (
+                  <div className="mt-3 p-4 rounded-lg bg-peach-pale border border-peach/40 text-sm text-charcoal">
+                    {geoError}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -561,7 +661,7 @@ export default function TripQuestionnaire({
               onClick={() => setStep(step + 1)}
               disabled={
                 (step === 0 && (!formData.departureDate || !formData.returnDate || !!dateError)) ||
-                (step === 3 && !formData.departureCity)
+                (step === 3 && (!formData.departureCity || !residencyState || isResidencyBlocked(residencyState)))
               }
               className="flex-1 px-6 py-3 bg-teal-deep text-white rounded-lg hover:bg-ocean transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
             >

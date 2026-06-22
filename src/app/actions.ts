@@ -3,6 +3,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { searchFlights as searchRealFlights, type FlightSearchResult } from "@/lib/apis/flights";
+import {
+  MIN_BOOKING_LEAD_DAYS,
+  MAX_BOOKING_HORIZON_DAYS,
+  MIN_TRIP_NIGHTS,
+  MAX_TRIP_NIGHTS,
+  bookingDateBound,
+} from "@/lib/constants";
+import { isResidencyBlocked, blockedStateMessage } from "@/lib/geofence";
 
 // Save Travel DNA results to database
 export async function saveTravelDNA(data: {
@@ -62,6 +70,7 @@ export async function saveTripRequest(data: {
   partySize: number;
   partyType: string;
   departureCity: string;
+  residencyState: string;
   constraintsDietary: string[];
   constraintsMobility: string[];
   constraintsPassport: string[];
@@ -76,6 +85,41 @@ export async function saveTripRequest(data: {
     return { error: "Not authenticated" };
   }
 
+  // ── Seller of Travel geofence (defense-in-depth) ──
+  // TripRoll v1 does not operate for residents of registration-required states.
+  if (!data.residencyState) {
+    return { error: "Please tell us which state you live in." };
+  }
+  if (isResidencyBlocked(data.residencyState)) {
+    return { blocked: true, message: blockedStateMessage(data.residencyState) };
+  }
+
+  // ── Server-side date validation (defense-in-depth) ──
+  const depDate = data.departureDate;
+  const retDate = data.returnDate;
+  const minDep = bookingDateBound(MIN_BOOKING_LEAD_DAYS);
+  const maxDep = bookingDateBound(MAX_BOOKING_HORIZON_DAYS);
+
+  if (depDate < minDep) {
+    return { error: "Departure date must be at least tomorrow." };
+  }
+  if (depDate > maxDep) {
+    return { error: `Departure date cannot be more than ${MAX_BOOKING_HORIZON_DAYS} days from today.` };
+  }
+  if (retDate <= depDate) {
+    return { error: "Return date must be after departure date." };
+  }
+
+  const nights = Math.ceil(
+    (new Date(retDate).getTime() - new Date(depDate).getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (nights < MIN_TRIP_NIGHTS) {
+    return { error: `Trip must be at least ${MIN_TRIP_NIGHTS} nights.` };
+  }
+  if (nights > MAX_TRIP_NIGHTS) {
+    return { error: `Trip cannot exceed ${MAX_TRIP_NIGHTS} nights.` };
+  }
+
   const { data: request, error } = await supabase
     .from("trip_requests")
     .insert({
@@ -88,6 +132,7 @@ export async function saveTripRequest(data: {
       party_size: data.partySize,
       party_type: data.partyType,
       departure_city: data.departureCity,
+      residency_state: data.residencyState,
       travel_mode: data.travelMode,
       constraints_dietary: data.constraintsDietary,
       constraints_mobility: data.constraintsMobility,

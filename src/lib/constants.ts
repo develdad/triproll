@@ -1,5 +1,33 @@
 import type { TravelDNAQuestion, TravelDNAArchetype, Destination } from "./types";
 
+/* ─── Booking-window constraints ─── */
+
+/** Minimum days from today before departure is allowed (no same-day bookings). */
+export const MIN_BOOKING_LEAD_DAYS = 1;
+
+/**
+ * Maximum days from today a departure date can be set.
+ * 330 days aligns with the standard airline schedule release window
+ * (most carriers open bookings ~11 months / 330 days out).
+ */
+export const MAX_BOOKING_HORIZON_DAYS = 330;
+
+/** Minimum trip length in nights. */
+export const MIN_TRIP_NIGHTS = 2;
+
+/** Maximum trip length in nights (practical ceiling for a single booking). */
+export const MAX_TRIP_NIGHTS = 30;
+
+/**
+ * Helper: returns an ISO date string (YYYY-MM-DD) offset by `days` from today,
+ * evaluated in the user's local timezone.
+ */
+export function bookingDateBound(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split("T")[0];
+}
+
 export const BRAND_COLORS = {
   teapDeep: "#0D7377",
   tealBright: "#14A3A8",

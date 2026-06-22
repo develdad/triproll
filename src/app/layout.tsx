@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, DM_Serif_Display, JetBrains_Mono } from "next/font/google";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const inter = Inter({
@@ -18,10 +19,18 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
+const TITLE = "TripRoll - Spontaneous Travel, Delivered";
+const DESCRIPTION =
+  "Spin the globe. Get a complete trip. TripRoll eliminates trip planning by delivering personalized, ready-to-go travel packages within your budget.";
+
 export const metadata: Metadata = {
-  title: "TripRoll - Spontaneous Travel, Delivered",
-  description:
-    "Spin the globe. Get a complete trip. TripRoll eliminates trip planning by delivering personalized, ready-to-go travel packages within your budget.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: TITLE,
+    template: "%s | TripRoll",
+  },
+  description: DESCRIPTION,
+  applicationName: "TripRoll",
   keywords: [
     "travel",
     "spontaneous travel",
@@ -30,6 +39,25 @@ export const metadata: Metadata = {
     "vacation",
     "TripRoll",
   ],
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "TripRoll",
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "TripRoll" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: ["/icon-512.png"],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0D7377",
 };
 
 export default function RootLayout({

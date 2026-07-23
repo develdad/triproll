@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  /* TripRoll brand system */
+  --color-deep: #052e30;
+  --color-lagoon: #0d7377;
+  --color-aqua: #2ec4c9;
+  --color-mist: #e6f4f4;
+  --color-sand: #faf7f1;
+  --color-ink: #10201f;
+  --color-body: #3d4f4e;
+  --color-coral: #ff6b57;
+  --color-gold: #f5b942;
+
+  --font-display: "Satoshi", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-sand);
+  color: var(--color-ink);
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+}
+
+.globe-wrap canvas {
+  outline: none;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.rise {
+  animation: rise 0.5s ease both;
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(46, 196, 201, 0.45); }
+  70% { box-shadow: 0 0 0 18px rgba(46, 196, 201, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(46, 196, 201, 0); }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2.2s infinite;
+}

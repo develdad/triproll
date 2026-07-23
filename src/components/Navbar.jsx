@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { Menu, X, Globe2 } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import { site } from '../data/site.js'
 
 export default function Navbar() {
@@ -9,11 +9,8 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-deep/10 bg-sand/90 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link to="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-lagoon text-sand">
-            <Globe2 size={20} />
-          </span>
-          <span className="font-display text-xl font-bold tracking-tight text-ink">TripRoll</span>
+        <Link to="/" className="flex items-center" onClick={() => setOpen(false)}>
+          <img src="/logo.png" alt="TripRoll" width="1357" height="348" className="h-9 w-auto" />
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">

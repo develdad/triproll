@@ -7,7 +7,7 @@ export default function Footer() {
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="flex flex-col gap-8 sm:flex-row sm:items-start sm:justify-between">
           <div className="max-w-xs">
-            <p className="font-display text-2xl font-bold text-sand">TripRoll</p>
+            <img src="/logo-light.png" alt="TripRoll" width="2712" height="695" className="h-8 w-auto opacity-90" />
             <p className="mt-2 text-sm leading-relaxed">{site.tagline} Surprise travel built around your Travel DNA.</p>
           </div>
           <nav className="flex flex-col gap-2 text-sm">

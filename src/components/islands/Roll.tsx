@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import { AIRPORTS, RESTRICTED_STATES, US_STATES, VETOES, ui } from '../../data/roll.ts';
-import { MIN_LEAD_DAYS, rollTrip, type Flexibility, type Passport, type Trip, type Veto } from '../../lib/dna.ts';
+import { MIN_LEAD_DAYS, fmt, minBudgetPP, rollTrip, type Flexibility, type Passport, type Trip, type Veto } from '../../lib/dna.ts';
+import { BUDGET_MAX } from '../../lib/pricing.config.ts';
+import { moodFor, type Mood } from '../../data/photos.ts';
 import { loadDna, loadParams, saveParams, type StoredDna, type StoredParams } from '../../lib/storage.ts';
 import { emitGlobe } from '../../lib/globeBus.ts';
 import { submitLead } from '../../lib/leads.ts';
-import PassCard from './PassCard.tsx';
+import ItineraryCard, { makeRef, type MoodImage } from './ItineraryCard.tsx';
+import Timeline from './Timeline.tsx';
 
 type Phase = 'params' | 'rolling' | 'result' | 'request' | 'sent';
 const MAX_REROLLS = 3;
@@ -29,7 +32,7 @@ const DEFAULTS: StoredParams = {
   passport: 'valid', vetoes: [], reveal: 'surprise',
 };
 
-export default function Roll() {
+export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
   const [params, setParams] = useState<StoredParams>(DEFAULTS);
   const [dna, setDna] = useState<StoredDna | null>(null);
   const [months, setMonths] = useState<{ value: string; label: string }[]>([]);
@@ -40,6 +43,7 @@ export default function Roll() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [announce, setAnnounce] = useState('');
+  const [ref, setRef] = useState('TR-......');
   const [hydrated, setHydrated] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stepHead = useRef<HTMLHeadingElement>(null);
@@ -53,6 +57,8 @@ export default function Roll() {
   const rerollsUsed = Math.max(0, rolls.length - 1);
   const trip = rolls[rolls.length - 1];
   const restricted = (RESTRICTED_STATES as readonly string[]).includes(form.state);
+  const floor = useMemo(() => minBudgetPP(params.nights, params.party, params.passport), [params.nights, params.party, params.passport]);
+  const belowFloor = hydrated && params.budget < floor;
   const minDate = useMemo(() => (today ? addDays(today, MIN_LEAD_DAYS) : ''), [today]);
 
   useEffect(() => {
@@ -80,6 +86,7 @@ export default function Roll() {
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (params.airport.trim().length < 3) e.airport = 'Enter your departure airport, for example PHX.';
+    if (params.budget < floor) e.budget = ui.belowFloor(fmt(floor));
     if (params.flexibility === 'month') { if (!params.month) e.date = 'Choose a month.'; }
     else if (!params.earliest || params.earliest < minDate) e.date = `Choose a date at least ${MIN_LEAD_DAYS} days from today.`;
     setErrors(e);
@@ -95,23 +102,25 @@ export default function Roll() {
     const wait = reduced ? 0 : ROLL_MS;
     setMessage('');
     if (!res.ok) {
-      const msg = res.reason === 'over-budget' ? ui.overBudget(`$${res.minBudget?.toLocaleString('en-US')}`) : res.reason === 'exhausted' ? ui.exhausted : ui.noMatch;
+      const msg = res.reason === 'below-floor' ? ui.belowFloor(fmt(res.minBudget ?? floor)) : res.reason === 'exhausted' ? ui.exhausted : ui.noMatch;
       if (fresh) { setPhase('params'); setMessage(msg); } else setMessage(msg);
       emitGlobe({ mode: 'idle' });
       return;
     }
     setPhase('rolling');
     setAnnounce(ui.rolling);
-    emitGlobe({ mode: wait ? 'spin' : 'idle' });
+    if (window.matchMedia('(max-width: 61.99rem)').matches) document.querySelector('.roll-side')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+    emitGlobe({ mode: 'spin' });
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const t = res.trip;
       setRolls((r) => (fresh ? [t] : [...r, t]));
+      setRef(makeRef());
       const show = params.reveal === 'now';
       setRevealed(show);
       setPhase('result');
       setAnnounce(show ? `Trip rolled. Destination: ${t.dest.name}, ${t.dest.country}.` : 'Trip rolled. Destination sealed.');
-      if (show) emitGlobe({ mode: 'focus', lat: t.dest.lat, lng: t.dest.lng });
+      if (show) emitGlobe({ mode: 'focus', lat: t.dest.lat, lng: t.dest.lng, label: `${t.dest.name}, ${t.dest.country}` });
       else emitGlobe({ mode: 'idle' });
     }, wait);
   }
@@ -130,7 +139,8 @@ export default function Roll() {
     if (!trip) return;
     setRevealed(true);
     setAnnounce(`Destination revealed: ${trip.dest.name}, ${trip.dest.country}.`);
-    emitGlobe({ mode: 'focus', lat: trip.dest.lat, lng: trip.dest.lng });
+    if (window.matchMedia('(max-width: 61.99rem)').matches) document.querySelector('.roll-side')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+    emitGlobe({ mode: 'focus', lat: trip.dest.lat, lng: trip.dest.lng, label: `${trip.dest.name}, ${trip.dest.country}` });
   }
   function editRules() {
     setPhase('params');
@@ -207,11 +217,14 @@ export default function Roll() {
           </div>
 
           <div className="field">
-            <label htmlFor="budget">Budget per person <span className="hint">USD, flights and stay combined</span></label>
+            <label htmlFor="budget">Budget per person <span className="hint">USD, one package price for the whole trip</span></label>
             <div className="range-row">
-              <input id="budget" type="range" min={400} max={6000} step={50} value={params.budget} onChange={(e) => set('budget', Number(e.target.value))} aria-valuetext={`$${params.budget}`} />
-              <input id="budget-n" aria-label="Budget per person in dollars" type="number" inputMode="numeric" min={400} max={6000} step={50} value={params.budget} onChange={(e) => set('budget', clamp(Math.round(Number(e.target.value)), 400, 6000))} />
+              <input id="budget" type="range" min={floor} max={BUDGET_MAX} step={10} value={Math.min(BUDGET_MAX, Math.max(floor, params.budget))} onChange={(e) => set('budget', Number(e.target.value))} aria-valuetext={`$${params.budget}`} />
+              <input id="budget-n" aria-label="Budget per person in dollars" type="number" inputMode="numeric" min={floor} max={BUDGET_MAX} step={10} value={params.budget || ''} onChange={(e) => set('budget', clamp(Math.round(Number(e.target.value)), 0, BUDGET_MAX))} aria-invalid={belowFloor || !!errors.budget} aria-describedby="budget-note" />
             </div>
+            <p className={belowFloor ? 'error' : 'hint'} id="budget-note" role={belowFloor ? 'alert' : undefined}>
+              {belowFloor ? ui.belowFloor(fmt(floor)) : `Minimum for ${params.nights} nights and ${params.party} ${params.party === 1 ? 'traveler' : 'travelers'}: ${fmt(floor)} per person.`}
+            </p>
           </div>
 
           <fieldset>
@@ -283,8 +296,8 @@ export default function Roll() {
       {(phase === 'result' || phase === 'request') && trip && (
         <div>
           <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>{phase === 'result' ? 'Your roll' : 'Request this trip'}</h2>
-          <PassCard trip={trip} airport={params.airport} revealed={revealed} dna={dna?.dna ?? null} />
-          <p className="fine" style={{ maxWidth: 'none' }}>{ui.estimateNote}</p>
+          <ItineraryCard trip={trip} airport={params.airport} revealed={revealed} dna={dna?.dna ?? null} mood={moods[moodFor(trip.dest)]} refCode={ref} />
+          <p className="fine">{ui.estimateNote}</p>
           {message && <p className="notice warn" role="alert" style={{ marginTop: '1rem' }}>{message}</p>}
 
           {phase === 'result' && (
@@ -301,7 +314,9 @@ export default function Roll() {
           )}
 
           {phase === 'request' && (
-            <form onSubmit={onSubmit} style={{ marginTop: '2rem' }} noValidate>
+            <form onSubmit={onSubmit} className="request-form" noValidate>
+              <h3 className="form-title">Send your request</h3>
+              <Timeline active={0} />
               <div className="grid2">
                 <div className="field"><label htmlFor="r-name">Name</label><input id="r-name" type="text" autoComplete="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                 <div className="field"><label htmlFor="r-email">Email</label><input id="r-email" type="email" autoComplete="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
@@ -324,7 +339,7 @@ export default function Roll() {
                 <button type="submit" className="btn" disabled={sending}>{sending ? 'Sending' : restricted ? 'Join the waitlist' : 'Send trip request'}</button>
                 <button type="button" className="btn ghost" onClick={() => setPhase('result')}>Back to roll</button>
               </div>
-              {!restricted && <p className="hint" style={{ marginTop: '0.75rem' }}>This is a request, not a booking. Nothing is charged.</p>}
+              {!restricted && <p className="hint" style={{ marginTop: '0.75rem' }}>{ui.requestNote}</p>}
             </form>
           )}
         </div>
@@ -334,6 +349,7 @@ export default function Roll() {
         <div>
           <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>{sentKind === 'trip' ? 'Request received' : 'You are on the waitlist'}</h2>
           <p className="lead">{sentKind === 'trip' ? ui.successTrip : ui.successWaitlist}</p>
+          {sentKind === 'trip' && <Timeline active={1} />}
           <div className="controls"><button type="button" className="btn ghost" onClick={editRules}>Roll another trip</button></div>
         </div>
       )}

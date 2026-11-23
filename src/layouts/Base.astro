@@ -32,10 +32,14 @@ const graph = buildGraph(site, { crumbs, extra: extraLd });
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#faf9f6" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/favicon.png" />
+    <meta name="theme-color" content="#0d7377" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script is:inline>document.documentElement.classList.add('js');</script>
     <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
     <link rel="preload" href={serifLatin} as="font" type="font/woff2" crossorigin />
     <Seo title={title} description={description} image={image} noindex={noindex} type={type} />
@@ -50,5 +54,20 @@ const graph = buildGraph(site, { crumbs, extra: extraLd });
       <slot />
     </main>
     <Footer />
+    <script is:inline>
+      (function () {
+        var els = document.querySelectorAll('.reveal');
+        if (!els.length) return;
+        if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          els.forEach(function (e) { e.classList.add('in'); });
+          return;
+        }
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+        }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+        els.forEach(function (e) { io.observe(e); });
+        setTimeout(function () { els.forEach(function (e) { e.classList.add('in'); }); }, 3500);
+      })();
+    </script>
   </body>
 </html>

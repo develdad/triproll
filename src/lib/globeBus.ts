@@ -1,5 +1,5 @@
 // Tiny message bus so the Roll island can drive the separate Globe island.
-export type GlobeMsg = { mode: 'idle' | 'spin' | 'focus'; lat?: number; lng?: number };
+export type GlobeMsg = { mode: 'idle' | 'spin' | 'focus'; lat?: number; lng?: number; label?: string };
 const EVT = 'triproll:globe';
 
 export function emitGlobe(msg: GlobeMsg) {

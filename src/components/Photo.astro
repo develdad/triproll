@@ -1,0 +1,36 @@
+---
+// Responsive photo: AVIF and WebP, explicit dimensions, lazy unless told otherwise.
+import { Picture } from 'astro:assets';
+import { photos } from '../lib/photos';
+import { PHOTO_ALT, type PhotoKey } from '../data/photos';
+
+interface Props {
+  name: PhotoKey;
+  sizes?: string;
+  widths?: number[];
+  eager?: boolean;
+  alt?: string;
+  class?: string;
+  // Decorative use when text beside the image already says what it shows.
+  decorative?: boolean;
+  position?: string;
+}
+const { name, sizes = '100vw', widths = [480, 800, 1200, 1800], eager = false, alt, class: cls = '', decorative = false, position } = Astro.props;
+const src = photos[name];
+const useWidths = widths.filter((w) => w <= src.width);
+---
+
+<Picture
+  src={src}
+  alt={decorative ? '' : (alt ?? PHOTO_ALT[name])}
+  role={decorative ? 'presentation' : undefined}
+  formats={['avif', 'webp']}
+  widths={useWidths}
+  sizes={sizes}
+  loading={eager ? 'eager' : 'lazy'}
+  decoding={eager ? 'sync' : 'async'}
+  fetchpriority={eager ? 'high' : undefined}
+  class={`ph ${cls}`}
+  style={position ? `object-position:${position}` : undefined}
+  quality={72}
+/>

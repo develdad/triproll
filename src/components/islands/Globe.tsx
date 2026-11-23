@@ -1,75 +1,104 @@
 import { useEffect, useRef, useState } from 'react';
-import createGlobe from 'cobe';
-import { lastGlobe, onGlobe, type GlobeMsg } from '../../lib/globeBus.ts';
+import { lastGlobe, onGlobe } from '../../lib/globeBus.ts';
+import type { Earth } from '../../lib/earth.ts';
+import Icon from './Icon.tsx';
 
-const toAngles = (lat: number, lng: number): [number, number] => [Math.PI - ((lng * Math.PI) / 180 - Math.PI / 2), (lat * Math.PI) / 180];
-const wrap = (a: number) => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
+type Props = { variant: 'hero' | 'roll' };
 
-// Static fallback shown until WebGL is ready, and when it is unavailable.
-function Fallback() {
-  return (
-    <svg viewBox="0 0 200 200" role="img" aria-label="Globe outline">
-      <circle cx="100" cy="100" r="92" fill="#141413" />
-      <g fill="none" stroke="#6fd0d4" strokeWidth="1.4" opacity="0.9">
-        <circle cx="100" cy="100" r="92" />
-        <ellipse cx="100" cy="100" rx="38" ry="92" />
-        <ellipse cx="100" cy="100" rx="72" ry="92" opacity="0.5" />
-        <line x1="8" y1="100" x2="192" y2="100" />
-        <path d="M14 62 Q100 82 186 62" />
-        <path d="M14 138 Q100 118 186 138" />
-      </g>
-    </svg>
-  );
+function hasWebGL(): boolean {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch { return false; }
 }
 
-export default function Globe() {
+// The static poster (rendered by the page) is always underneath. This island only adds the live canvas on top,
+// and only when it is worth it: hero loads on idle (desktop) or first interaction (small screens), never under
+// reduced motion; the roll globe always loads because it carries state, and renders single frames when motion is reduced.
+export default function Globe({ variant }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [ready, setReady] = useState(false);
+  const label = useRef<HTMLDivElement>(null);
+  const earthRef = useRef<Earth | null>(null);
+  const [live, setLive] = useState(false);
+  const interactive = variant === 'roll';
 
   useEffect(() => {
     const el = canvas.current;
     if (!el) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let globe: ReturnType<typeof createGlobe>;
-    try {
-      globe = createGlobe(el, {
-        devicePixelRatio: 2, width: 1000, height: 1000, phi: 0.4, theta: 0.3, dark: 0.85, diffuse: 1.6,
-        mapSamples: 16000, mapBrightness: 9, baseColor: [0.2, 0.22, 0.22], markerColor: [0.44, 0.82, 0.83],
-        glowColor: [0.05, 0.3, 0.32], markers: [],
+    if (variant === 'hero' && reduced) return;
+    if (!hasWebGL()) return;
+
+    let cancelled = false;
+    let off: (() => void) | undefined;
+    const cleanups: (() => void)[] = [];
+
+    const start = async () => {
+      if (cancelled) return;
+      try {
+        const { createEarth } = await import('../../lib/earth.ts');
+        if (cancelled) return;
+        const earth = await createEarth(el, {
+          base: '/globe', interactive, reducedMotion: reduced, idleSpin: variant === 'hero' ? 0.05 : 0.06,
+          onFirstFrame: () => setLive(true),
+          onLabel: ({ x, y, visible, label: text }) => {
+            const l = label.current;
+            if (!l) return;
+            l.style.opacity = visible ? '1' : '0';
+            l.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -135%)`;
+            if (l.textContent !== text) l.textContent = text;
+          },
+        });
+        if (cancelled) { earth.dispose(); return; }
+        earthRef.current = earth;
+        const first = lastGlobe();
+        if (first) earth.send(first);
+        off = onGlobe((m) => earth.send(m));
+      } catch { /* the poster stays */ }
+    };
+
+    if (variant === 'roll') {
+      start();
+    } else if (window.matchMedia('(min-width: 900px)').matches) {
+      const go = () => {
+        const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+        if (ric) ric(start, { timeout: 3500 }); else setTimeout(start, 2000);
+      };
+      if (document.readyState === 'complete') go();
+      else { window.addEventListener('load', go, { once: true }); cleanups.push(() => window.removeEventListener('load', go)); }
+    } else {
+      const once = () => { cleanups.forEach((c) => c()); start(); };
+      ['pointerdown', 'touchstart', 'scroll', 'keydown'].forEach((t) => {
+        window.addEventListener(t, once, { once: true, passive: true });
+        cleanups.push(() => window.removeEventListener(t, once));
       });
-    } catch { return; }
-    setReady(true);
+    }
 
-    let phi = 0.4, theta = 0.3, mode: GlobeMsg['mode'] = 'idle', tPhi = 0, tTheta = 0, raf = 0, markers: { location: [number, number]; size: number }[] = [];
-    const apply = (m: GlobeMsg) => {
-      mode = m.mode;
-      if (m.mode === 'focus' && m.lat !== undefined && m.lng !== undefined) {
-        [tPhi, tTheta] = toAngles(m.lat, m.lng);
-        markers = [{ location: [m.lat, m.lng], size: 0.09 }];
-        if (reduced) { phi = tPhi; theta = tTheta; }
-      } else { markers = []; }
-      if (reduced) globe.update({ phi, theta, markers });
+    return () => {
+      cancelled = true;
+      cleanups.forEach((c) => c());
+      off?.();
+      earthRef.current?.dispose();
+      earthRef.current = null;
     };
-    const first = lastGlobe();
-    if (first) apply(first);
-    else if (reduced) globe.update({ phi, theta, markers });
-    const off = onGlobe(apply);
-
-    const tick = () => {
-      if (mode === 'spin') phi += 0.11;
-      else if (mode === 'focus') { phi += wrap(tPhi - phi) * 0.06; theta += (tTheta - theta) * 0.06; }
-      else { phi += 0.003; theta += (0.3 - theta) * 0.04; }
-      globe.update({ phi, theta, markers });
-      raf = requestAnimationFrame(tick);
-    };
-    if (!reduced) raf = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(raf); off(); globe.destroy(); };
-  }, []);
+  }, [variant, interactive]);
 
   return (
-    <div className={`globe${ready ? ' ready' : ''}`}>
-      <Fallback />
-      <canvas ref={canvas} width={1000} height={1000} aria-hidden="true" />
+    <div className={`globe-live ${variant}${live ? ' live' : ''}`}>
+      <canvas
+        ref={canvas}
+        tabIndex={interactive ? 0 : -1}
+        role={interactive ? 'img' : undefined}
+        aria-label={interactive ? 'Interactive globe. Drag to rotate. Use plus and minus to zoom.' : undefined}
+        aria-hidden={interactive ? undefined : true}
+      />
+      <div className="globe-pin-label" ref={label} aria-hidden="true" />
+      {interactive && live && (
+        <div className="globe-controls">
+          <button type="button" onClick={() => earthRef.current?.zoomBy(0.85)} aria-label="Zoom in"><Icon name="plus" /></button>
+          <button type="button" onClick={() => earthRef.current?.zoomBy(1.18)} aria-label="Zoom out"><Icon name="minus" /></button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,10 +1,24 @@
 ---
+import { Image, getImage } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import Roll from '../components/islands/Roll.tsx';
 import Globe from '../components/islands/Globe.tsx';
 import FormDefs from '../components/FormDefs.astro';
 import NoscriptWaitlist from '../components/NoscriptWaitlist.astro';
+import globePoster from '../assets/globe-poster.webp';
+import { photos } from '../lib/photos';
+import { MOODS, MOOD_PHOTO, PHOTO_ALT, type Mood } from '../data/photos';
 import { rollPage as c } from '../data/copy';
+
+// Mood photos for the itinerary card header, one per climate mood. Never keyed by destination.
+const entries = await Promise.all(
+  MOODS.map(async (m) => {
+    const key = MOOD_PHOTO[m];
+    const img = await getImage({ src: photos[key], width: 900, format: 'webp', quality: 70 });
+    return [m, { src: img.src, alt: PHOTO_ALT[key], width: img.attributes.width as number, height: img.attributes.height as number }] as const;
+  }),
+);
+const moods = Object.fromEntries(entries) as Record<Mood, { src: string; alt: string; width: number; height: number }>;
 ---
 
 <Base title={c.title} description={c.description} crumbs={[{ name: 'Home', path: '/' }, { name: 'Roll a trip', path: '/roll' }]}>
@@ -18,10 +32,13 @@ import { rollPage as c } from '../data/copy';
   </section>
   <section class="section" style="border-top:1px solid var(--rule);padding-block:3rem 1rem">
     <div class="wrap roll-grid">
-      <div class="js-only"><Roll client:load /></div>
+      <div class="js-only"><Roll client:load moods={moods} /></div>
       <aside class="roll-side" aria-label="Globe">
-        <Globe client:visible />
-        <p class="globe-cap">The globe spins on every roll. It only points at a place once you reveal it.</p>
+        <div class="globe-stage">
+          <div class="poster"><Image src={globePoster} alt="A globe showing North and South America" widths={[480, 800]} sizes="(min-width: 62rem) 23rem, 90vw" format="webp" quality={78} loading="lazy" /></div>
+          <Globe client:visible variant="roll" />
+        </div>
+        <p class="globe-cap">Drag to turn it, plus and minus to zoom. It spins on every roll and only points at a place once you reveal it.</p>
       </aside>
       <div style="grid-column:1/-1"><NoscriptWaitlist source="roll:nojs" intro={c.noscript} /></div>
     </div>
@@ -30,7 +47,7 @@ import { rollPage as c } from '../data/copy';
     <div class="wrap narrow prose">
       <h2>{c.below.title}</h2>
       {c.below.body.map((p) => <p>{p}</p>)}
-      <p><a href="/how-it-works#pricing">How pricing and quotes work</a> and <a href="/faq">the FAQ</a> have the detail.</p>
+      <p><a href="/how-it-works#pricing">How pricing and review work</a> and <a href="/faq">the FAQ</a> have the detail.</p>
     </div>
   </section>
   <FormDefs names={['trip-request', 'waitlist']} />

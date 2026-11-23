@@ -1,76 +1,123 @@
 ---
+import { Image, getImage } from 'astro:assets';
 import Base from '../layouts/Base.astro';
-import BoardingPass from '../components/BoardingPass.astro';
+import Photo from '../components/Photo.astro';
+import Icon from '../components/Icon.astro';
+import Globe from '../components/islands/Globe.tsx';
+import ItineraryCard from '../components/islands/ItineraryCard.tsx';
+import Timeline from '../components/islands/Timeline.tsx';
+import globePoster from '../assets/globe-poster.webp';
+import { photos } from '../lib/photos';
+import { PHOTO_ALT, MOOD_PHOTO, moodFor } from '../data/photos';
+import { exampleTrip, exampleAirport } from '../data/example';
 import { home, faqs } from '../data/copy';
+
+const moodKey = moodFor(exampleTrip.dest);
+const photoKey = MOOD_PHOTO[moodKey];
+const m = await getImage({ src: photos[photoKey], width: 900, format: 'webp', quality: 70 });
+const mood = { src: m.src, alt: PHOTO_ALT[photoKey], width: m.attributes.width as number, height: m.attributes.height as number };
+const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const;
 ---
 
 <Base title={home.title} description={home.description}>
-  <section class="hero">
+  <section class="hero hero-dark">
+    <div class="hero-globe" aria-hidden="true">
+      <div class="globe-stage">
+        <div class="poster">
+          <Image src={globePoster} alt="" role="presentation" widths={[480, 720, 1100, 1400]} sizes="(min-width: 60rem) 62rem, 55vw" format="webp" quality={66} loading="eager" fetchpriority="high" decoding="async" />
+        </div>
+        <Globe client:idle variant="hero" />
+      </div>
+    </div>
     <div class="wrap hero-grid">
       <div>
         <span class="eyebrow">{home.kicker}</span>
         <h1>Spin the globe.<br /><em>Get a trip.</em></h1>
         <p class="lead">{home.explainer}</p>
         <div class="actions">
-          <a class="btn" href="/roll">{home.ctaRoll}</a>
+          <a class="btn" href="/roll">{home.ctaRoll}<Icon name="arrow" size={18} /></a>
           <a class="btn ghost" href="/travel-dna">{home.ctaDna}</a>
         </div>
       </div>
       <div class="hero-pass">
-        <BoardingPass />
+        <ItineraryCard trip={exampleTrip} airport={exampleAirport} revealed={false} dna={null} mood={mood} refCode="TR-SAMPLE" example />
         <p class="fine">{home.exampleNote}</p>
       </div>
     </div>
   </section>
 
-  <section class="section" id="how">
+  <section class="photo-band">
+    <Photo name="viewpoint" sizes="100vw" widths={[640, 1000, 1600, 2400]} position="50% 40%" />
+    <div class="wrap reveal">
+      <h2>{home.bandTitle}</h2>
+      <p>{home.bandBody}</p>
+    </div>
+  </section>
+
+  <section class="section section-tint loop-section" id="how">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">01 / The loop</span>
         <h2>{home.stepsTitle}</h2>
         <p class="lead">{home.stepsLead}</p>
       </div>
-      <ol class="rows">
+      <ol class="rows reveal">
         {home.steps.map((s) => <li><h3>{s.title}</h3><p>{s.body}</p></li>)}
       </ol>
     </div>
   </section>
 
-  <section class="section">
+  <section class="photo-bg-wrap section">
+    <Photo name="mountains-cloud" sizes="100vw" widths={[640, 1000, 1600]} decorative />
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">02 / The trip</span>
         <h2>{home.includedTitle}</h2>
         <p class="lead">{home.includedLead}</p>
       </div>
-      <ul class="plain-rows">
-        {home.included.map((s) => <li><h3>{s.title}</h3><p>{s.body}</p></li>)}
+      <ul class="included-grid">
+        {home.included.map((s, i) => (
+          <li class="reveal"><span class="ic"><Icon name={includedIcons[i]} size={22} /></span><h3>{s.title}</h3><p>{s.body}</p></li>
+        ))}
       </ul>
     </div>
   </section>
 
   <section class="section on-ink">
-    <div class="wrap">
-      <div class="section-head">
-        <span class="eyebrow">03 / Guardrails</span>
-        <h2>You set <em>the rules</em></h2>
-        <p class="lead">{home.rulesLead}</p>
+    <div class="wrap rules-grid">
+      <div>
+        <div class="section-head">
+          <span class="eyebrow">03 / Guardrails</span>
+          <h2>You set <em>the rules</em></h2>
+          <p class="lead">{home.rulesLead}</p>
+        </div>
+        <ul class="plain-rows">
+          {home.rules.map((s) => <li><h3>{s.title}</h3><p>{s.body}</p></li>)}
+        </ul>
       </div>
-      <ul class="plain-rows">
-        {home.rules.map((s) => <li><h3>{s.title}</h3><p>{s.body}</p></li>)}
-      </ul>
+      <div class="reveal">
+        <div class="collage">
+          <figure><Photo name="market-produce" sizes="(min-width: 62rem) 22rem, 50vw" widths={[400, 700, 1000]} /></figure>
+          <figure><Photo name="old-town" sizes="(min-width: 62rem) 22rem, 50vw" widths={[400, 700, 1000]} position="50% 60%" /></figure>
+          <figure><Photo name="snow-glacier" sizes="(min-width: 62rem) 22rem, 50vw" widths={[400, 700, 1000]} /></figure>
+          <figure><Photo name="desert-dunes" sizes="(min-width: 62rem) 44rem, 100vw" widths={[500, 900, 1400]} position="50% 70%" /></figure>
+        </div>
+        <p class="fine" style="color:#a8c3c4">{home.galleryBody}</p>
+      </div>
     </div>
   </section>
 
   <section class="section">
-    <div class="wrap where">
-      <div>
+    <div class="wrap">
+      <div class="where-card reveal">
         <span class="eyebrow">04 / Honest status</span>
         <h2>{home.whereTitle}</h2>
-      </div>
-      <div>
-        {home.whereBody.map((p) => <p class="lead">{p}</p>)}
-        <p><a href="/how-it-works#pricing">How pricing and quotes work</a></p>
+        <div style="margin-top:1.25rem;max-width:52rem">
+          {home.whereBody.map((p) => <p class="lead">{p}</p>)}
+        </div>
+        <h3 style="margin-top:1.5rem">{home.timelineTitle}</h3>
+        <Timeline />
+        <p style="margin-top:1.25rem"><a href="/how-it-works#pricing">How pricing and review work</a></p>
       </div>
     </div>
   </section>
@@ -93,12 +140,13 @@ import { home, faqs } from '../data/copy';
     </div>
   </section>
 
-  <section class="section">
-    <div class="wrap">
-      <h2 style="max-width:14ch">{home.finalTitle}</h2>
+  <section class="photo-cta">
+    <Photo name="lake-boat" sizes="100vw" widths={[640, 1000, 1600, 2400]} decorative position="50% 50%" />
+    <div class="wrap reveal">
+      <h2>{home.finalTitle}</h2>
       <p class="lead" style="margin-top:1.25rem">{home.finalBody}</p>
       <div class="actions">
-        <a class="btn" href="/roll">{home.ctaRoll}</a>
+        <a class="btn" href="/roll">{home.ctaRoll}<Icon name="arrow" size={18} /></a>
         <a class="btn ghost" href="/travel-dna">{home.ctaDna}</a>
       </div>
     </div>

@@ -14,7 +14,10 @@
     "check": "astro check",
     "verify": "npm test && astro check && npm run build",
     "seo:live": "node scripts/seo-check.mjs --live",
-    "placeholders": "node scripts/make-placeholders.mjs",
+    "brand": "node scripts/make-brand.mjs",
+    "textures": "node scripts/make-textures.mjs",
+    "poster": "node scripts/render-globe-poster.mjs",
+    "og": "node scripts/make-og.mjs",
     "indexnow": "node scripts/indexnow.mjs",
     "test": "node --test src/lib/dna.test.ts"
   },
@@ -25,17 +28,18 @@
     "@fontsource/instrument-serif": "5.3.0",
     "@tailwindcss/vite": "4.3.3",
     "astro": "7.4.0",
-    "cobe": "2.0.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "sharp": "0.35.5",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "three": "0.170.0"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
     "@netlify/plugin-lighthouse": "6.0.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/three": "0.170.0",
     "typescript": "6.0.3"
   }
 }

@@ -1,14 +1,28 @@
 ---
 import Base from '../layouts/Base.astro';
+import Photo from '../components/Photo.astro';
 import { howItWorks as c } from '../data/copy';
+
+const stepPhotos = ['market-produce', 'traveler-suitcase', 'wing-window', 'lagoon-aerial'] as const;
 ---
 
 <Base title={c.title} description={c.description} crumbs={[{ name: 'Home', path: '/' }, { name: 'How it works', path: '/how-it-works' }]}>
   <section class="page-head">
-    <div class="wrap narrow">
+    <div class="wrap">
       <p class="crumbs"><a href="/">Home</a> / How it works</p>
       <h1>{c.h1}</h1>
       <p class="lead">{c.lead}</p>
+      <ol class="step-cards">
+        {c.stepCards.map((s, i) => (
+          <li class="reveal">
+            <div class="step-img">
+              <Photo name={stepPhotos[i]} sizes="(min-width: 70rem) 16rem, (min-width: 40rem) 45vw, 100vw" widths={[400, 700, 1000]} eager={i === 0} decorative />
+              <span class="step-no" aria-hidden="true">{i + 1}</span>
+            </div>
+            <div class="step-body"><h3>{s.title}</h3><p>{s.body}</p></div>
+          </li>
+        ))}
+      </ol>
       <ul class="toc">
         {c.sections.map((s) => <li><a href={`#${s.id}`}>{s.h}</a></li>)}
       </ul>

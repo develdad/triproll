@@ -1,15 +1,18 @@
 ---
 import { site } from '../site.config';
 import { footerBlurb } from '../data/copy';
+import Icon from './Icon.astro';
 const b = site.business;
 const year = new Date().getFullYear();
+const cta = site.nav[0];
 ---
 
 <footer class="site-footer">
   <div class="wrap grid">
     <div>
-      <img src="/logo-white.svg" alt={b.name} width="160" height="48" />
-      <p>{footerBlurb}</p>
+      <img src="/logo-white.svg" alt={b.name} width="160" height="48" loading="lazy" />
+      <p>{b.tagline}</p>
+      <a class="btn sm foot-cta" href={cta.href}>{cta.label}<Icon name="arrow" size={18} /></a>
     </div>
     <div>
       <p class="strong">Explore</p>
@@ -21,6 +24,10 @@ const year = new Date().getFullYear();
         {site.footerNav.map((n) => <li><a href={n.href}>{n.label}</a></li>)}
         {b.sameAs.map((u) => <li><a href={u} rel="noopener">{new URL(u).hostname.replace(/^www\./, '')}</a></li>)}
       </ul>
+    </div>
+    <div>
+      <p class="strong">Beta</p>
+      <div class="foot-note"><Icon name="shield" size={18} /><span>{footerBlurb}</span></div>
     </div>
   </div>
   <div class="wrap legal">

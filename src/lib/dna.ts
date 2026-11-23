@@ -1,9 +1,10 @@
 // Travel DNA scoring and the weighted trip roll. Ported from v2 with the same mechanics:
 // answers are averaged per axis, archetypes are matched by squared distance, destinations are
-// weighted by affinity cubed, and the estimate carries the same 12 percent extras and 15 percent margin.
+// weighted by affinity cubed. Pricing rules (package price, cost ceiling, floors) live in pricing.config.ts.
 // Pure functions with an injectable rng and clock so they can be tested.
 import { archetypes, type Answer, type Archetype, type Axis, type Dna } from '../data/quiz.ts';
-import { destinations, type Destination } from '../data/destinations.ts';
+import { destinations, toPublic, type Destination, type PublicDestination } from '../data/destinations.ts';
+import { BUDGET_MAX, COST_CEILING, EXTRAS_RATE, FLOOR_OVERALL, FLOOR_PER_NIGHT, PRICE_STEP, SEASON_MAX } from './pricing.config.ts';
 
 export const AXES: Axis[] = ['adventure', 'social', 'structure', 'cultural', 'budget', 'energy'];
 
@@ -39,23 +40,18 @@ export function matchArchetype(dna: Dna): Archetype {
   return best;
 }
 
-export function affinity(dna: Dna, dest: Destination): number {
+export function affinity(dna: Dna, dest: PublicDestination): number {
   const d = AXES.reduce((acc, a) => acc + (dna[a] - dest.dna[a]) ** 2, 0);
   return 1 / (1 + d);
 }
 
-export function fitLabel(dna: Dna, dest: Destination): 'strong' | 'good' | 'stretch' {
+export function fitLabel(dna: Dna, dest: PublicDestination): 'strong' | 'good' | 'stretch' {
   const a = affinity(dna, dest);
   return a >= 0.7 ? 'strong' : a >= 0.5 ? 'good' : 'stretch';
 }
 
 export type Band = 'short' | 'medium' | 'long';
 export const bandFor = (hours: number): Band => (hours < 4 ? 'short' : hours <= 8 ? 'medium' : 'long');
-
-export const SEASON_MIN = 0.92;
-export const SEASON_SPAN = 0.22;
-export const EXTRAS_RATE = 0.12;
-export const MARGIN_RATE = 0.15;
 
 export type RollParams = {
   dna?: Dna | null;
@@ -72,11 +68,12 @@ export type RollParams = {
   rng?: Rng;
 };
 
-export type Price = { flights: number; hotel: number; extras: number; service: number; total: number; perPerson: number };
-export type Trip = { dest: Destination; nights: number; party: number; start: string; end: string; price: Price; band: Band };
+// The only price data the UI layer receives: one package price. No cost lines, no margin.
+export type Price = { perPerson: number; total: number };
+export type Trip = { dest: PublicDestination; nights: number; party: number; start: string; end: string; price: Price; band: Band };
 export type RollResult =
   | { ok: true; trip: Trip }
-  | { ok: false; reason: 'no-match' | 'exhausted' | 'over-budget'; minBudget?: number };
+  | { ok: false; reason: 'no-match' | 'exhausted' | 'below-floor'; minBudget?: number };
 
 export function passesFilters(d: Destination, passport: Passport, vetoes: Veto[]): boolean {
   if (passport === 'none' && !d.domestic) return false;
@@ -88,17 +85,26 @@ export function passesFilters(d: Destination, passport: Passport, vetoes: Veto[]
   return true;
 }
 
-export function priceFor(d: Destination, party: number, nights: number, flightMult: number, hotelMult: number): Price {
+// Internal cost per person for one destination. Server-side style helper: never put its result on a Trip.
+export function internalCostPP(d: Destination, party: number, nights: number, mult: number = SEASON_MAX): number {
   const rooms = Math.ceil(party / 2);
-  const flights = Math.round(d.flightBase * flightMult) * party;
-  const hotel = Math.round(d.hotelNight * nights * rooms * hotelMult);
+  const flights = Math.round(d.flightBase * mult) * party;
+  const hotel = Math.round(d.hotelNight * nights * rooms * mult);
   const extras = Math.round((flights + hotel) * EXTRAS_RATE);
-  const service = Math.round((flights + hotel + extras) * MARGIN_RATE);
-  const total = flights + hotel + extras + service;
-  return { flights, hotel, extras, service, total, perPerson: Math.round(total / party) };
+  return (flights + hotel + extras) / party;
 }
 
-const minPricePP = (d: Destination, party: number, nights: number) => priceFor(d, party, nights, SEASON_MIN, SEASON_MIN).perPerson;
+const roundUp = (n: number, step: number) => Math.ceil(n / step) * step;
+export const packagePrice = (budgetPP: number) => Math.floor(budgetPP / PRICE_STEP) * PRICE_STEP;
+
+// Lowest per-person budget that can produce a trip for these inputs: the cheapest eligible destination at
+// maximum seasonal cost must sit at or below the cost ceiling, and never below the hard floors.
+export function minBudgetPP(nights: number, party: number, passport: Passport, vetoes: Veto[] = []): number {
+  const pool = destinations.filter((d) => passesFilters(d, passport, vetoes));
+  const costs = pool.map((d) => internalCostPP(d, party, nights));
+  const byCost = costs.length ? roundUp(Math.min(...costs) / COST_CEILING, PRICE_STEP) : BUDGET_MAX;
+  return Math.max(byCost, FLOOR_PER_NIGHT * nights, FLOOR_OVERALL);
+}
 
 const MS_DAY = 86400000;
 const toMs = (iso: string) => Date.parse(iso + 'T00:00:00Z');
@@ -132,19 +138,18 @@ export function rollTrip(p: RollParams = {}): RollResult {
   const passport = p.passport ?? 'valid';
   const party = Math.min(8, Math.max(1, Math.round(p.party ?? 2)));
   const nights = Math.min(10, Math.max(2, Math.round(p.nights ?? 5)));
-  const budget = p.budgetPP ?? Infinity;
+  const budget = p.budgetPP ?? BUDGET_MAX;
   const vetoes = p.vetoes ?? [];
   const exclude = p.exclude ?? [];
 
   const eligible = destinations.filter((d) => passesFilters(d, passport, vetoes));
   if (!eligible.length) return { ok: false, reason: 'no-match' };
-  const fresh = eligible.filter((d) => !exclude.includes(d.id));
-  if (!fresh.length) return { ok: false, reason: 'exhausted' };
-  const pool = fresh.filter((d) => minPricePP(d, party, nights) <= budget);
-  if (!pool.length) {
-    const cheapest = Math.min(...fresh.map((d) => minPricePP(d, party, nights)));
-    return { ok: false, reason: 'over-budget', minBudget: Math.ceil(cheapest / 50) * 50 };
+  const affordable = eligible.filter((d) => internalCostPP(d, party, nights) <= budget * COST_CEILING);
+  if (!affordable.length || budget < FLOOR_PER_NIGHT * nights || budget < FLOOR_OVERALL) {
+    return { ok: false, reason: 'below-floor', minBudget: minBudgetPP(nights, party, passport, vetoes) };
   }
+  const pool = affordable.filter((d) => !exclude.includes(d.id));
+  if (!pool.length) return { ok: false, reason: 'exhausted' };
 
   let dest: Destination;
   if (p.dna) {
@@ -161,16 +166,12 @@ export function rollTrip(p: RollParams = {}): RollResult {
     dest = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))];
   }
 
-  // Seasonal variation, retried a few times, then clamped to the low end which is guaranteed to fit.
-  let price = priceFor(dest, party, nights, SEASON_MIN, SEASON_MIN);
-  for (let i = 0; i < 4; i++) {
-    const cand = priceFor(dest, party, nights, SEASON_MIN + rng() * SEASON_SPAN, SEASON_MIN + rng() * SEASON_SPAN);
-    if (cand.perPerson <= budget) { price = cand; break; }
-  }
+  const perPerson = packagePrice(budget);
+  const price: Price = { perPerson, total: perPerson * party };
 
   const start = pickStart({ flexibility: p.flexibility, earliest: p.earliest, month: p.month, today: p.today, rng });
   const end = toISO(toMs(start) + nights * MS_DAY);
-  return { ok: true, trip: { dest, nights, party, start, end, price, band: bandFor(dest.hours) } };
+  return { ok: true, trip: { dest: toPublic(dest), nights, party, start, end, price, band: bandFor(dest.hours) } };
 }
 
 export const fmt = (n: number) => '$' + n.toLocaleString('en-US');
@@ -178,7 +179,7 @@ export const fmtDate = (iso: string) =>
   new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 
 // Five packing hints derived from catalog fields. First five that apply, in priority order.
-export function packingHints(d: Destination): string[] {
+export function packingHints(d: PublicDestination): string[] {
   const out: string[] = [];
   out.push(d.domestic ? 'Government photo ID' : 'Passport valid for six months past your return');
   if (d.cold) out.push('Insulated layers and a warm hat');

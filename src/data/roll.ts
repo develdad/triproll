@@ -1,7 +1,9 @@
 // Roll experience data and UI strings. Components import from here; no copy lives in components.
 import type { Veto } from '../lib/dna.ts';
 
-export const RESTRICTED_STATES = ['CA', 'FL', 'HI', 'WA'] as const;
+// The single list of blocked residency states. Copy reads RESTRICTED_NAMES, so edit only here.
+export const RESTRICTED_STATES = ['CA', 'FL', 'HI', 'IA', 'WA'] as const;
+export const RESTRICTED_NAMES = 'California, Florida, Hawaii, Iowa or Washington';
 
 export const US_STATES: { code: string; name: string }[] = [
   ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'], ['CA', 'California'], ['CO', 'Colorado'],
@@ -36,20 +38,29 @@ export const VETOES: { id: Veto; label: string }[] = [
 
 export const BAND_LABEL = { short: 'Short haul, under 4 h', medium: 'Medium haul, 4 to 8 h', long: 'Long haul, over 8 h' } as const;
 
+// Beta order flow, shown as a 4-step timeline on the trip card and in the request step.
+export const TIMELINE = [
+  { title: 'Requested', body: 'You send your roll. No payment step yet.' },
+  { title: 'Reviewed by a person', body: 'Within 72 hours, before any card is charged.' },
+  { title: 'Confirmed and charged', body: 'Payment is collected only at confirmation.' },
+  { title: 'Itinerary delivered', body: 'The morning you leave, or sooner if you chose to reveal.' },
+] as const;
+
 export const ui = {
   steps: ['Parameters', 'Roll', 'Request'],
   paramsTitle: 'Set the rules',
   paramsIntro: 'These are hard rules. Every roll stays inside them.',
   rollButton: 'Roll the trip',
-  rolling: 'Rolling. Pricing a trip inside your rules.',
+  rolling: 'Rolling. Building a trip inside your rules.',
   rerollLimit: 'You have used all 3 rerolls for these rules. Change a rule to start a fresh set of rolls.',
   exhausted: 'Every destination that fits your rules has been rolled already. Loosen a rule to see more.',
   noMatch: 'No destination fits all of your rules. Remove a veto or change your passport status.',
-  overBudget: (min: string) => `Nothing fits that budget with these rules. The lowest workable budget is about ${min} per person.`,
-  estimateNote: 'Estimate only. Not live pricing. A person confirms real flight and hotel prices and emails you a quote before anything is charged.',
+  belowFloor: (min: string) => `This trip length needs at least ${min} per person. Raise your budget or shorten the trip.`,
+  estimateNote: 'Estimated package price, per person and total. It becomes final only when a person confirms your trip.',
   revealNote: 'Peeking is your call. The reveal preference you chose is sent with your request.',
-  restrictedNote: 'TripRoll cannot sell travel to residents of California, Florida, Hawaii or Washington yet. Choose one of these and we will add you to the waitlist instead of taking a trip request.',
-  successTrip: 'Request received. A person reviews your roll, prices it against real flight and hotel inventory, and emails you a firm quote. Nothing is charged until you approve that quote.',
+  restrictedNote: `TripRoll cannot sell travel to residents of ${RESTRICTED_NAMES} yet. Choose one of these and we will add you to the waitlist instead of taking a trip request.`,
+  requestNote: 'This is a request, not a booking. There is no payment step yet. A person reviews every order within 72 hours, and payment is collected only at confirmation.',
+  successTrip: 'Request received. A person reviews your order within 72 hours, before any card is charged. If the trip cannot be built inside your rules, you owe nothing and can roll again free. If it is confirmed, you get the confirmation and packing list, and tickets and the full itinerary arrive the morning you leave.',
   successWaitlist: 'You are on the waitlist. We will email you if TripRoll opens to residents of your state. No trip request was created.',
   submitError: 'That did not send. Check your connection and try again.',
 };

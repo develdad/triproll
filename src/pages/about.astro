@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import Photo from '../components/Photo.astro';
 import { about as c } from '../data/copy';
 ---
 
@@ -8,6 +9,7 @@ import { about as c } from '../data/copy';
     <div class="wrap narrow">
       <p class="crumbs"><a href="/">Home</a> / About</p>
       <h1>{c.h1}</h1>
+      <div class="head-photo"><Photo name="traveler-suitcase" sizes="(min-width: 72rem) 68rem, 100vw" widths={[640, 1000, 1600, 2000]} eager position="50% 35%" /></div>
     </div>
   </section>
   <section class="section" style="border-top:1px solid var(--rule)">

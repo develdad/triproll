@@ -19,6 +19,13 @@ export type Destination = {
   blurb: string; hours: number; climate: string; cold: boolean; city: boolean; remote: boolean;
 };
 
+// What the UI layer may see. Catalog cost inputs (flightBase, hotelNight) stay inside src/lib.
+export type PublicDestination = Omit<Destination, 'flightBase' | 'hotelNight'>;
+export function toPublic(d: Destination): PublicDestination {
+  const { flightBase: _f, hotelNight: _h, ...rest } = d;
+  return rest;
+}
+
 export const destinations: Destination[] = [
   { id: 'tokyo', name: 'Tokyo', country: 'Japan', lat: 35.68, lng: 139.69, domestic: false, visaOnArrival: true, flightBase: 1150, hotelNight: 160, wifi: true, beach: false, dna: { adventure: 0.6, social: 0.7, structure: 0.7, cultural: 0.95, budget: 0.4, energy: 0.9 }, blurb: 'Neon, noodles, and the best-run chaos on earth.', hours: 13, climate: 'Four seasons: mild spring and fall, humid summers, cool winters', cold: false, city: true, remote: false },
   { id: 'kyoto', name: 'Kyoto', country: 'Japan', lat: 35.01, lng: 135.77, domestic: false, visaOnArrival: true, flightBase: 1150, hotelNight: 140, wifi: true, beach: false, dna: { adventure: 0.4, social: 0.3, structure: 0.8, cultural: 1, budget: 0.45, energy: 0.4 }, blurb: 'Temples, tea houses, and quiet perfection.', hours: 14, climate: 'Four seasons: mild spring and fall, hot humid summers, cool winters', cold: false, city: true, remote: false },

@@ -14,8 +14,9 @@ interface Props {
   // Decorative use when text beside the image already says what it shows.
   decorative?: boolean;
   position?: string;
+  quality?: number;
 }
-const { name, sizes = '100vw', widths = [480, 800, 1200, 1800], eager = false, alt, class: cls = '', decorative = false, position } = Astro.props;
+const { name, sizes = '100vw', widths = [480, 800, 1200, 1800], eager = false, alt, class: cls = '', decorative = false, position, quality = 72 } = Astro.props;
 const src = photos[name];
 const useWidths = widths.filter((w) => w <= src.width);
 ---
@@ -28,9 +29,9 @@ const useWidths = widths.filter((w) => w <= src.width);
   widths={useWidths}
   sizes={sizes}
   loading={eager ? 'eager' : 'lazy'}
-  decoding={eager ? 'sync' : 'async'}
+  decoding="async"
   fetchpriority={eager ? 'high' : undefined}
   class={`ph ${cls}`}
   style={position ? `object-position:${position}` : undefined}
-  quality={72}
+  quality={quality}
 />

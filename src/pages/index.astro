@@ -1,5 +1,5 @@
 ---
-import { Image, getImage } from 'astro:assets';
+import { Picture, getImage } from 'astro:assets';
 import Base from '../layouts/Base.astro';
 import Photo from '../components/Photo.astro';
 import Icon from '../components/Icon.astro';
@@ -16,15 +16,21 @@ const moodKey = moodFor(exampleTrip.dest);
 const photoKey = MOOD_PHOTO[moodKey];
 const m = await getImage({ src: photos[photoKey], width: 900, format: 'webp', quality: 70 });
 const mood = { src: m.src, alt: PHOTO_ALT[photoKey], width: m.attributes.width as number, height: m.attributes.height as number };
+const posterWidths = [420, 600, 1100, 1400];
+const posterQ = 50;
+const posterSizes = '(min-width: 60rem) 62rem, 55vw';
+const posterSet = await Promise.all(posterWidths.map((w) => getImage({ src: globePoster, width: w, format: 'avif', quality: posterQ })));
+const posterSrcset = posterSet.map((i, k) => `${i.src} ${posterWidths[k]}w`).join(', ');
 const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const;
 ---
 
 <Base title={home.title} description={home.description}>
+  <link slot="head" rel="preload" as="image" type="image/avif" imagesrcset={posterSrcset} imagesizes={posterSizes} fetchpriority="high" />
   <section class="hero hero-dark">
     <div class="hero-globe" aria-hidden="true">
       <div class="globe-stage">
         <div class="poster">
-          <Image src={globePoster} alt="" role="presentation" widths={[480, 720, 1100, 1400]} sizes="(min-width: 60rem) 62rem, 55vw" format="webp" quality={66} loading="eager" fetchpriority="high" decoding="async" />
+          <Picture src={globePoster} alt="" role="presentation" formats={['avif', 'webp']} fallbackFormat="webp" widths={posterWidths} sizes={posterSizes} quality={posterQ} loading="eager" fetchpriority="high" decoding="async" />
         </div>
         <Globe client:media="(min-width: 1024px) and (prefers-reduced-motion: no-preference)" variant="hero" />
       </div>
@@ -46,7 +52,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     </div>
   </section>
 
-  <section class="photo-band">
+  <section class="defer photo-band">
     <Photo name="viewpoint" sizes="100vw" widths={[640, 1000, 1600, 2400]} position="50% 40%" />
     <div class="wrap reveal">
       <h2>{home.bandTitle}</h2>
@@ -54,7 +60,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     </div>
   </section>
 
-  <section class="section section-tint loop-section" id="how">
+  <section class="defer section section-tint loop-section" id="how">
     <div class="wrap">
       <div class="section-head">
         <span class="eyebrow">01 / The loop</span>
@@ -67,7 +73,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     </div>
   </section>
 
-  <section class="photo-bg-wrap section">
+  <section class="defer photo-bg-wrap section">
     <Photo name="mountains-cloud" sizes="100vw" widths={[640, 1000, 1600]} decorative />
     <div class="wrap">
       <div class="section-head">
@@ -83,7 +89,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     </div>
   </section>
 
-  <section class="section on-ink">
+  <section class="defer section on-ink">
     <div class="wrap rules-grid">
       <div>
         <div class="section-head">
@@ -107,7 +113,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     </div>
   </section>
 
-  <section class="section">
+  <section class="defer section">
     <div class="wrap">
       <div class="where-card reveal">
         <span class="eyebrow">04 / Honest status</span>
@@ -122,7 +128,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     </div>
   </section>
 
-  <section class="section">
+  <section class="defer section">
     <div class="wrap narrow">
       <div class="section-head">
         <span class="eyebrow">05 / Questions</span>
@@ -140,7 +146,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     </div>
   </section>
 
-  <section class="photo-cta">
+  <section class="defer photo-cta">
     <Photo name="lake-boat" sizes="100vw" widths={[640, 1000, 1600, 2400]} decorative position="50% 50%" />
     <div class="wrap reveal">
       <h2>{home.finalTitle}</h2>

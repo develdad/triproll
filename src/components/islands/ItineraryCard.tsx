@@ -52,7 +52,7 @@ export default function ItineraryCard({ trip, airport, revealed, dna, mood, refC
   return (
     <article className={`trip-card${example ? ' example' : ''}${revealed ? ' is-revealed' : ''}`} aria-label={label ?? `${title}, ${fmtDate(trip.start)} to ${fmtDate(trip.end)}`}>
       <header className="tc-head">
-        <img src={mood.src} alt={mood.alt} width={mood.width} height={mood.height} loading={example ? 'eager' : 'lazy'} decoding="async" {...(example ? { fetchPriority: 'high' as const } : {})} />
+        <img src={mood.src} alt={mood.alt} width={mood.width} height={mood.height} loading="lazy" decoding="async" />
         <div className="tc-scrim" aria-hidden="true" />
         <div className="tc-head-top">
           <span className={`chip-status ${revealed ? 'open' : 'sealed'}`}><Icon name={revealed ? 'pin' : 'lock'} size={14} />{revealed ? 'Revealed' : 'Sealed'}</span>

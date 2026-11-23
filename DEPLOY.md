@@ -55,3 +55,10 @@ Originals are in `src/assets/photos/`, rendered by `src/components/Photo.astro` 
 - `/roll` (not gated): performance 0.55 because headless Chrome rasterizes WebGL in software (SwiftShader), which blocks the main thread. The globe drops to 1x and 2048 textures on software renderers. Real GPUs are not affected. Check on a real phone before launch.
 - First-load transfer (Chrome, 4 s idle): `/` 805 KB desktop (includes the 4096 day texture) and 283 KB mobile; `/roll` 544 KB desktop and 521 KB mobile.
 - Scores vary by a few points between runs; the Netlify plugin thresholds in `netlify.toml` are unchanged.
+
+## Performance notes (Lighthouse 9 mobile, the version the Netlify plugin runs)
+- Marketing pages ship no script except JSON-LD. Scroll reveal is CSS only (`animation-timeline: view()`), so nothing starts hidden above the fold. The how-it-works page has no client JS.
+- The LCP image on `/` (globe poster, AVIF) and `/how-it-works` (first step photo, AVIF) is preloaded in `<head>` with the same srcset the `<picture>` uses. Keep the quality constants in the page frontmatter in sync with the markup (they feed both).
+- Fonts are self-hosted subsets in `src/assets/fonts` (rebuild with `python3 scripts/subset-fonts.py`). Keep font stacks short: every missing family in a long stack costs a font lookup on Linux, which showed up as first-layout time. `--font-mono` is `Menlo, monospace` for that reason.
+- Below-the-fold sections use `.defer` (`content-visibility: auto`) to skip their style and layout until near the viewport. Full-page screenshots of these pages show the skipped sections blank; scroll screenshots are correct.
+- Local results with `--throttling.cpuSlowdownMultiplier=8`: both pages 0.97 to 1.00. At 12x, total blocking time from first style and layout can still dip a page to about 0.85 to 0.9 on a bad run.

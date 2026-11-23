@@ -1,5 +1,10 @@
 @import 'tailwindcss';
 
+/* Self-hosted subset fonts (Basic Latin, Latin-1, common punctuation). Rebuild with scripts/subset-fonts.py. */
+@font-face { font-family: 'Inter Variable'; font-style: normal; font-weight: 400 700; font-display: swap; src: url('../assets/fonts/inter-latin-400-700.woff2') format('woff2'); }
+@font-face { font-family: 'Instrument Serif'; font-style: normal; font-weight: 400; font-display: swap; src: url('../assets/fonts/instrument-serif-400.woff2') format('woff2'); }
+@font-face { font-family: 'Instrument Serif'; font-style: italic; font-weight: 400; font-display: swap; src: url('../assets/fonts/instrument-serif-400-italic.woff2') format('woff2'); }
+
 /* TripRoll design tokens. Warm paper, near-black ink, one teal accent, one quiet neutral. */
 :root {
   --bg: #faf9f6;
@@ -26,7 +31,7 @@
   --error: #a3261c;
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-mono: Menlo, monospace; /* two entries on purpose: each missing family in a long stack costs a font lookup on Linux */
 }
 
 @theme {
@@ -62,6 +67,9 @@ a:hover { color: var(--accent-hover); }
 .section + .section { border-top: 1px solid var(--rule); }
 .section-head { margin-bottom: clamp(2rem, 5vw, 3.5rem); max-width: 46rem; }
 .section-head h2 { margin-bottom: 1rem; }
+
+/* Below-the-fold sections skip style, layout and paint until near the viewport. The remembered size keeps scrolling stable. */
+.defer { content-visibility: auto; contain-intrinsic-size: auto 44rem; }
 
 /* Header */
 .site-header { background: rgba(250, 249, 246, 0.92); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--rule); box-shadow: 0 1px 0 rgba(255,255,255,.6), 0 8px 24px -22px rgba(7, 42, 45, 0.6); position: sticky; top: 0; z-index: 20; }
@@ -395,8 +403,11 @@ input[type='range'] { width: 100%; min-height: 44px; accent-color: var(--accent)
 .faq details { background: transparent; }
 .faq summary:hover { color: var(--accent); }
 
-/* Scroll reveal: opt-in by JS (html.js), off under reduced motion, never hides content without JS */
+/* Scroll reveal: CSS only (scroll-driven), no script. Browsers without animation-timeline just show the content.
+   Elements already in view at load sit past the animation range, so they never start hidden. */
 @media (prefers-reduced-motion: no-preference) {
-  .js .reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); }
-  .js .reveal.in { opacity: 1; transform: none; }
+  @supports (animation-timeline: view()) {
+    .reveal { animation: reveal-in linear both; animation-timeline: view(); animation-range: entry 0% entry 30%; }
+    @keyframes reveal-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+  }
 }

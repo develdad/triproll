@@ -26,7 +26,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
         <div class="poster">
           <Image src={globePoster} alt="" role="presentation" widths={[480, 720, 1100, 1400]} sizes="(min-width: 60rem) 62rem, 55vw" format="webp" quality={66} loading="eager" fetchpriority="high" decoding="async" />
         </div>
-        <Globe client:idle variant="hero" />
+        <Globe client:media="(min-width: 1024px) and (prefers-reduced-motion: no-preference)" variant="hero" />
       </div>
     </div>
     <div class="wrap hero-grid">

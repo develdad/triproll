@@ -1,0 +1,21 @@
+---
+import Base from '../layouts/Base.astro';
+import { about as c } from '../data/copy';
+---
+
+<Base title={c.title} description={c.description} crumbs={[{ name: 'Home', path: '/' }, { name: 'About', path: '/about' }]}>
+  <section class="page-head">
+    <div class="wrap narrow">
+      <p class="crumbs"><a href="/">Home</a> / About</p>
+      <h1>{c.h1}</h1>
+    </div>
+  </section>
+  <section class="section" style="border-top:1px solid var(--rule)">
+    <div class="wrap narrow prose">
+      {c.paras.map((p, i) => <p class={i === 0 ? 'lead' : ''}>{p}</p>)}
+      <div class="actions">
+        <a class="btn" href="/roll">{c.ctaTitle}</a>
+      </div>
+    </div>
+  </section>
+</Base>

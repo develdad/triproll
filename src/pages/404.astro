@@ -1,0 +1,19 @@
+---
+import Base from '../layouts/Base.astro';
+import { site } from '../site.config';
+import { notFound } from '../data/copy';
+---
+
+<Base title={notFound.title} description={notFound.description} noindex>
+  <section class="page-head">
+    <div class="wrap narrow">
+      <span class="eyebrow">Error 404</span>
+      <h1>Off the map</h1>
+      <p class="lead">That page does not exist. Try one of these instead.</p>
+      <ul class="toc">
+        <li><a href="/">Home</a></li>
+        {site.nav.map((n) => <li><a href={n.href}>{n.label}</a></li>)}
+      </ul>
+    </div>
+  </section>
+</Base>

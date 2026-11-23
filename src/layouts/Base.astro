@@ -1,0 +1,54 @@
+---
+import '@fontsource-variable/inter';
+import '@fontsource/instrument-serif/latin-400.css';
+import '@fontsource/instrument-serif/latin-400-italic.css';
+import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url';
+import serifLatin from '@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2?url';
+import '../styles/global.css';
+import Seo from '../components/Seo.astro';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import Analytics from '../components/Analytics.astro';
+import { site } from '../site.config';
+import { buildGraph, type Crumb } from '../lib/schema';
+
+interface Props {
+  title: string;
+  description: string;
+  image?: string;
+  noindex?: boolean;
+  type?: 'website' | 'article';
+  crumbs?: Crumb[];
+  // Extra JSON-LD nodes appended to the @graph (for example FAQPage).
+  extraLd?: Record<string, unknown>[];
+}
+
+const { title, description, image, noindex, type, crumbs, extraLd } = Astro.props;
+const graph = buildGraph(site, { crumbs, extra: extraLd });
+---
+
+<!doctype html>
+<html lang="en" data-theme={site.theme}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#faf9f6" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={serifLatin} as="font" type="font/woff2" crossorigin />
+    <Seo title={title} description={description} image={image} noindex={noindex} type={type} />
+    <script type="application/ld+json" set:html={JSON.stringify(graph)} />
+    <Analytics />
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

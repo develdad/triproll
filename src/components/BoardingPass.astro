@@ -1,0 +1,43 @@
+---
+// Static, non-interactive sealed boarding pass used in the home hero. Sample values only.
+import { BAND_LABEL } from '../data/roll';
+---
+
+<div class="pass" role="img" aria-label="Example sealed TripRoll boarding pass: departing from Phoenix, destination sealed, five nights, medium haul, estimated 1,640 dollars per person.">
+  <div class="pass-main" aria-hidden="true">
+    <div class="pass-top"><strong>TripRoll</strong><span>Example pass</span></div>
+    <div class="pass-route">
+      <div class="pass-code"><small>From</small>PHX</div>
+      <div class="flip">
+        <div class="flip-inner">
+          <div class="face front">
+            <span class="tag">Destination</span>
+            <span class="big">Sealed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <dl class="pass-meta">
+      <div><dt>Depart</dt><dd>Mar 14, 2027</dd></div>
+      <div><dt>Return</dt><dd>Mar 19, 2027</dd></div>
+      <div><dt>Nights</dt><dd>5</dd></div>
+      <div class="span2"><dt>Flight band</dt><dd>{BAND_LABEL.medium}</dd></div>
+      <div><dt>Party</dt><dd>2</dd></div>
+      <div class="span3"><dt>Climate hint</dt><dd>Warm dry summers, mild wet winters</dd></div>
+    </dl>
+  </div>
+  <div class="pass-perf" aria-hidden="true"></div>
+  <div class="pass-stub" aria-hidden="true">
+    <div class="price-row">
+      <div><span class="price-tag">Estimated per person</span><span class="price">$1,640</span></div>
+      <div class="price-sub">$3,280 total, estimate</div>
+    </div>
+    <ul class="pass-list">
+      <li>Government photo ID or passport</li>
+      <li>Layers for changing weather</li>
+      <li>Swimsuit and reef-safe sunscreen</li>
+      <li>Comfortable walking shoes</li>
+      <li>Plug adapter and a card with no foreign fees</li>
+    </ul>
+  </div>
+</div>

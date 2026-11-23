@@ -1,0 +1,46 @@
+---
+// Emits exactly one of each head tag. Throws at build on bad input so a
+// defect can never reach dist.
+import { site, isDemo } from '../site.config';
+
+interface Props {
+  title: string;
+  description: string;
+  image?: string;
+  noindex?: boolean;
+  type?: 'website' | 'article';
+}
+
+const { title, description, image, noindex = false, type = 'website' } = Astro.props;
+const where = Astro.url.pathname;
+
+if (!title || !title.trim()) throw new Error(`[Seo] ${where}: title is missing`);
+if (title.length > 60) throw new Error(`[Seo] ${where}: title is ${title.length} chars (max 60): "${title}"`);
+if (!description || description.length < 70 || description.length > 170) {
+  throw new Error(
+    `[Seo] ${where}: description is ${description ? description.length : 0} chars (must be 70 to 170, ideal 120 to 160)`,
+  );
+}
+
+// Canonical = domain + path, no .html, no trailing slash except the root.
+let path = Astro.url.pathname.replace(/\.html$/, '').replace(/\/index$/, '').replace(/\/+$/, '');
+if (path === '') path = '/';
+const canonical = site.domain + (path === '/' ? '/' : path);
+const imageUrl = new URL(image ?? '/og-default.png', site.domain).toString();
+const robots = noindex || isDemo ? 'noindex, nofollow' : null;
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonical} />
+{robots && <meta name="robots" content={robots} />}
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:type" content={type} />
+<meta property="og:image" content={imageUrl} />
+<meta property="og:site_name" content={site.business.name} />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={imageUrl} />

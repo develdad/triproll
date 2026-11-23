@@ -1,0 +1,37 @@
+---
+import Base from '../layouts/Base.astro';
+import Roll from '../components/islands/Roll.tsx';
+import Globe from '../components/islands/Globe.tsx';
+import FormDefs from '../components/FormDefs.astro';
+import NoscriptWaitlist from '../components/NoscriptWaitlist.astro';
+import { rollPage as c } from '../data/copy';
+---
+
+<Base title={c.title} description={c.description} crumbs={[{ name: 'Home', path: '/' }, { name: 'Roll a trip', path: '/roll' }]}>
+  <noscript slot="head"><style>.js-only{display:none}</style></noscript>
+  <section class="page-head">
+    <div class="wrap">
+      <p class="crumbs"><a href="/">Home</a> / Roll a trip</p>
+      <h1>{c.h1}</h1>
+      <p class="lead">{c.lead}</p>
+    </div>
+  </section>
+  <section class="section" style="border-top:1px solid var(--rule);padding-block:3rem 1rem">
+    <div class="wrap roll-grid">
+      <div class="js-only"><Roll client:load /></div>
+      <aside class="roll-side" aria-label="Globe">
+        <Globe client:visible />
+        <p class="globe-cap">The globe spins on every roll. It only points at a place once you reveal it.</p>
+      </aside>
+      <div style="grid-column:1/-1"><NoscriptWaitlist source="roll:nojs" intro={c.noscript} /></div>
+    </div>
+  </section>
+  <section class="section">
+    <div class="wrap narrow prose">
+      <h2>{c.below.title}</h2>
+      {c.below.body.map((p) => <p>{p}</p>)}
+      <p><a href="/how-it-works#pricing">How pricing and quotes work</a> and <a href="/faq">the FAQ</a> have the detail.</p>
+    </div>
+  </section>
+  <FormDefs names={['trip-request', 'waitlist']} />
+</Base>

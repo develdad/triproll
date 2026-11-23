@@ -1,0 +1,88 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22.22.0"
+
+# No SPA catch-all redirect. This is a static site: unknown paths get dist/404.html with a real 404.
+# Legacy-URL 301s (migrations only) go below as [[redirects]], one per changed URL.
+
+# Trailing-slash URLs resolve to the canonical no-slash pages.
+[[redirects]]
+  from = "/roll/"
+  to = "/roll"
+  status = 301
+
+[[redirects]]
+  from = "/travel-dna/"
+  to = "/travel-dna"
+  status = 301
+
+[[redirects]]
+  from = "/how-it-works/"
+  to = "/how-it-works"
+  status = 301
+
+[[redirects]]
+  from = "/faq/"
+  to = "/faq"
+  status = 301
+
+[[redirects]]
+  from = "/about/"
+  to = "/about"
+  status = 301
+
+[[redirects]]
+  from = "/privacy/"
+  to = "/privacy"
+  status = 301
+
+[[redirects]]
+  from = "/terms/"
+  to = "/terms"
+  status = 301
+
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "SAMEORIGIN"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+[[headers]]
+  for = "/_astro/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Quality gate: fails the deploy before it goes live if Lighthouse drops below these scores.
+# Audits the home page and the How it works page (statically served from dist).
+# CUTOVER: the seo line below is 1 in live mode. new-site.mjs lowers it to 0.6 for demo sites
+# (a noindex page cannot score 1); flipping mode to live requires setting it back to 1.
+# scripts/seo-check.mjs enforces this: a live site with seo < 1 fails the build.
+[[plugins]]
+  package = "@netlify/plugin-lighthouse"
+
+  [plugins.inputs]
+    fail_deploy_on_score_thresholds = "true"
+
+  [plugins.inputs.thresholds]
+    performance = 0.95
+    accessibility = 0.95
+    best-practices = 0.95
+    seo = 1 # LIGHTHOUSE_SEO_THRESHOLD
+
+  [[plugins.inputs.audits]]
+    path = "index.html"
+
+  [[plugins.inputs.audits]]
+    path = "how-it-works.html"

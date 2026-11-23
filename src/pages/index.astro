@@ -1,0 +1,106 @@
+---
+import Base from '../layouts/Base.astro';
+import BoardingPass from '../components/BoardingPass.astro';
+import { home, faqs } from '../data/copy';
+---
+
+<Base title={home.title} description={home.description}>
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">{home.kicker}</span>
+        <h1>Spin the globe.<br /><em>Get a trip.</em></h1>
+        <p class="lead">{home.explainer}</p>
+        <div class="actions">
+          <a class="btn" href="/roll">{home.ctaRoll}</a>
+          <a class="btn ghost" href="/travel-dna">{home.ctaDna}</a>
+        </div>
+      </div>
+      <div class="hero-pass">
+        <BoardingPass />
+        <p class="fine">{home.exampleNote}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">01 / The loop</span>
+        <h2>{home.stepsTitle}</h2>
+        <p class="lead">{home.stepsLead}</p>
+      </div>
+      <ol class="rows">
+        {home.steps.map((s) => <li><h3>{s.title}</h3><p>{s.body}</p></li>)}
+      </ol>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">02 / The trip</span>
+        <h2>{home.includedTitle}</h2>
+        <p class="lead">{home.includedLead}</p>
+      </div>
+      <ul class="plain-rows">
+        {home.included.map((s) => <li><h3>{s.title}</h3><p>{s.body}</p></li>)}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section on-ink">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">03 / Guardrails</span>
+        <h2>You set <em>the rules</em></h2>
+        <p class="lead">{home.rulesLead}</p>
+      </div>
+      <ul class="plain-rows">
+        {home.rules.map((s) => <li><h3>{s.title}</h3><p>{s.body}</p></li>)}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap where">
+      <div>
+        <span class="eyebrow">04 / Honest status</span>
+        <h2>{home.whereTitle}</h2>
+      </div>
+      <div>
+        {home.whereBody.map((p) => <p class="lead">{p}</p>)}
+        <p><a href="/how-it-works#pricing">How pricing and quotes work</a></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap narrow">
+      <div class="section-head">
+        <span class="eyebrow">05 / Questions</span>
+        <h2>{home.faqTitle}</h2>
+      </div>
+      <div class="faq">
+        {home.faqTeaserIndexes.map((i) => (
+          <details>
+            <summary>{faqs[i].q}</summary>
+            <p>{faqs[i].a}</p>
+          </details>
+        ))}
+      </div>
+      <p style="margin-top:1.5rem"><a href="/faq">{home.faqSeeAll}</a></p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <h2 style="max-width:14ch">{home.finalTitle}</h2>
+      <p class="lead" style="margin-top:1.25rem">{home.finalBody}</p>
+      <div class="actions">
+        <a class="btn" href="/roll">{home.ctaRoll}</a>
+        <a class="btn ghost" href="/travel-dna">{home.ctaDna}</a>
+      </div>
+    </div>
+  </section>
+</Base>

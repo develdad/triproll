@@ -1,0 +1,16 @@
+---
+// Hidden static copies of every Netlify form so deploy-time detection sees all fields.
+// Islands submit with fetch (src/lib/leads.ts). These never render for users.
+import { FORM_FIELDS } from '../lib/forms';
+const { names } = Astro.props as { names: (keyof typeof FORM_FIELDS)[] };
+---
+
+{
+  names.map((n) => (
+    <form name={n} method="POST" action="/thank-you" data-netlify="true" netlify-honeypot="bot-field" hidden>
+      <input type="hidden" name="form-name" value={n} />
+      <input name="bot-field" />
+      {FORM_FIELDS[n].map((f) => <input name={f} />)}
+    </form>
+  ))
+}

@@ -1,0 +1,42 @@
+---
+import Base from '../layouts/Base.astro';
+import { faqs } from '../data/copy';
+
+const ld = [
+  {
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+  },
+];
+---
+
+<Base
+  title="TripRoll FAQ: Pricing, Quotes, Passports and Rerolls"
+  description="Answers on how TripRoll pricing and quotes work, what happens when you request a trip, passports and visas, rerolls, vetoes, and which states we can serve."
+  crumbs={[{ name: 'Home', path: '/' }, { name: 'FAQ', path: '/faq' }]}
+  extraLd={ld}
+>
+  <section class="page-head">
+    <div class="wrap narrow">
+      <p class="crumbs"><a href="/">Home</a> / FAQ</p>
+      <h1>Questions, answered</h1>
+      <p class="lead">Straight answers on pricing, quotes, rules and what happens after you roll.</p>
+    </div>
+  </section>
+  <section class="section" style="border-top:1px solid var(--rule)">
+    <div class="wrap narrow">
+      <div class="faq">
+        {faqs.map((f) => (
+          <details>
+            <summary>{f.q}</summary>
+            <p>{f.a}</p>
+          </details>
+        ))}
+      </div>
+      <div class="actions">
+        <a class="btn" href="/roll">Roll a trip</a>
+        <a class="btn ghost" href="/how-it-works">How it works</a>
+      </div>
+    </div>
+  </section>
+</Base>

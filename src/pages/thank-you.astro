@@ -1,0 +1,15 @@
+---
+import Base from '../layouts/Base.astro';
+import { thanks } from '../data/copy';
+---
+
+<Base title={thanks.title} description={thanks.description} noindex>
+  <section class="page-head">
+    <div class="wrap narrow">
+      <span class="eyebrow">Received</span>
+      <h1>Thank you</h1>
+      <p class="lead">We received your details. A trip request is reviewed by a person who prices it and emails you a quote. Nothing is charged until you approve a quote.</p>
+      <div class="actions"><a class="btn" href="/">Back to home</a></div>
+    </div>
+  </section>
+</Base>

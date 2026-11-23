@@ -1,0 +1,17 @@
+---
+// No-JS fallback: a plain POST to the waitlist form. The Netlify form definition itself lives in FormDefs.astro.
+const { source, intro } = Astro.props as { source: string; intro: string };
+---
+
+<noscript>
+  <div class="notice">
+    <p>{intro}</p>
+    <form method="POST" action="/thank-you" name="waitlist" class="grid2">
+      <input type="hidden" name="form-name" value="waitlist" />
+      <input type="hidden" name="source" value={source} />
+      <p hidden><label>Leave this empty <input name="bot-field" /></label></p>
+      <div class="field"><label for={`ns-${source}`}>Email</label><input id={`ns-${source}`} type="email" name="email" autocomplete="email" required /></div>
+      <div><button class="btn" type="submit">Join the waitlist</button></div>
+    </form>
+  </div>
+</noscript>

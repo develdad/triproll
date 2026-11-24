@@ -5,8 +5,8 @@
 import sharp from 'sharp';
 import { writeFileSync } from 'node:fs';
 
-const TEAL = '#0d7377';
-const PIN = '#f5a623';
+const TEAL = '#00a99d';
+const PIN = '#fbb03b';
 const PAPER = '#faf9f6';
 
 // Bold shapes only, drawn on a 64 grid. The ring passes behind the globe (back half) and in front of it (front half).

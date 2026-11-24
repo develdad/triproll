@@ -4,6 +4,7 @@ import Base from '../layouts/Base.astro';
 import Photo from '../components/Photo.astro';
 import Icon from '../components/Icon.astro';
 import Globe from '../components/islands/Globe.tsx';
+import OrbitOverlay from '../components/islands/OrbitOverlay.tsx';
 import ItineraryCard from '../components/islands/ItineraryCard.tsx';
 import Timeline from '../components/islands/Timeline.tsx';
 import globePoster from '../assets/globe-poster.webp';
@@ -31,7 +32,9 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
     <div class="hero-globe" aria-hidden="true">
       <div class="globe-stage">
         <div class="poster">
+          <OrbitOverlay part="back" animate />
           <Picture src={globePoster} alt="" role="presentation" formats={['avif', 'webp']} fallbackFormat="webp" widths={posterWidths} sizes={posterSizes} quality={posterQ} loading="eager" fetchpriority="high" decoding="async" />
+          <OrbitOverlay part="front" />
         </div>
         <Globe client:media="(min-width: 1024px) and (prefers-reduced-motion: no-preference)" variant="hero" />
       </div>

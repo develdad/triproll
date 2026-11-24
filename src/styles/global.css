@@ -139,6 +139,18 @@ a:hover { color: var(--accent-hover); }
 /* Globe stage: static poster underneath, live canvas fades in on top */
 .globe-stage { position: relative; width: 100%; aspect-ratio: 1; }
 .globe-stage .poster, .globe-stage .poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+/* Orbit overlay (swoosh and pin) drawn as SVG over the poster. Phones animate it with CSS only; the desktop live globe replaces it. */
+.globe-stage .poster svg.orbit { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; overflow: visible; }
+.orbit .ring { fill: none; stroke: #5fe0d4; stroke-width: 0.5; opacity: 0.28; }
+.orbit .trail { fill: none; stroke: #5fe0d4; stroke-width: 0.5; stroke-linecap: round; }
+.orbit .pin { transform-origin: 0 0; }
+@media (max-width: 1023.98px) and (prefers-reduced-motion: no-preference) {
+  .hero-globe .orbit .pin { animation: orbit-pin 26s linear infinite; animation-delay: -0.91s; }
+  .hero-globe .orbit .trail-0 { animation: orbit-trail-0 26s linear infinite; animation-delay: -0.91s; }
+  .hero-globe .orbit .trail-1 { animation: orbit-trail-1 26s linear infinite; animation-delay: -0.91s; }
+  .hero-globe .poster { animation: poster-drift 38s ease-in-out infinite alternate; }
+  @keyframes poster-drift { from { transform: scale(1) translate3d(0, 0, 0); } to { transform: scale(1.035) translate3d(-0.9%, 0.7%, 0); } }
+}
 .globe-live { position: absolute; inset: 0; }
 /* Once the live canvas has faded in, the poster underneath is hidden so its pin never shows next to the live one. */
 .globe-stage:has(.globe-live.live) .poster { opacity: 0; transition: opacity 0s linear 0.7s; }

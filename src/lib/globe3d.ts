@@ -15,6 +15,8 @@ export type GlobeOptions = {
   maxDpr?: number;
   idleSpin?: number; // rad/s
   onFirstFrame?: () => void;
+  // Poster rendering only: hide the swoosh and the pin (the page draws them as an SVG overlay) and publish the projected orbit.
+  bare?: boolean;
 };
 export type Globe3d = { setMode: (m: GlobeMode) => void; dispose: () => void };
 
@@ -53,6 +55,32 @@ const TRAIL_FRAG = `uniform float uHead; uniform vec3 uColor; varying float vT;
 void main(){ float behind = fract(uHead - vT); float a = 0.2 + 0.6 * exp(-behind * 7.0); gl_FragColor = vec4(uColor, a);
   #include <colorspace_fragment>
 }`;
+
+// Screen-space samples of the orbit for the SVG overlay (poster script only). Coordinates are percentages of the square canvas.
+// Per sample: x, y, apparent pin radius, outward angle in degrees (0 = up), and whether the point is nearer the camera than the globe center.
+function projectOrbit(orbit: Group, camera: PerspectiveCamera, n = 120) {
+  orbit.updateMatrixWorld(true); camera.updateMatrixWorld(true);
+  const scr = (v: Vector3) => { const p = v.clone().project(camera); return [(p.x * 0.5 + 0.5) * 100, (0.5 - p.y * 0.5) * 100]; };
+  const samples: number[][] = [];
+  const front: boolean[] = [];
+  const depth: number[] = [];
+  const right = new Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU;
+    const local = new Vector3(Math.cos(a) * ORBIT_R, 0, Math.sin(a) * ORBIT_R);
+    const w = orbit.localToWorld(local.clone());
+    const [x, y] = scr(w);
+    const [rx, ry] = scr(w.clone().addScaledVector(right, 0.052));
+    const wh = orbit.localToWorld(local.clone().multiplyScalar(1 + 0.1 / ORBIT_R));
+    const [hx, hy] = scr(wh);
+    const ang = (Math.atan2(hx - x, -(hy - y)) * 180) / Math.PI;
+    const z = w.clone().applyMatrix4(camera.matrixWorldInverse).z; // negative in front of the camera
+    depth.push(z + DIST); // positive: nearer than the globe center
+    front.push(z + DIST > 0);
+    samples.push([x, y, Math.hypot(rx - x, ry - y), ang]);
+  }
+  return { samples, front, depth, startPin: START_PIN };
+}
 
 function loadTexture(url: string): Promise<Texture> {
   return new Promise((resolve, reject) => {
@@ -99,6 +127,7 @@ export async function createGlobe(canvas: HTMLCanvasElement, opts: GlobeOptions)
 
   // Pin: an amber teardrop whose tip points at the globe, with a small light dot, as in the logo.
   const pin = new Group();
+  if (opts.bare) orbit.visible = false;
   const amber = track(new MeshBasicMaterial({ color: 0xfbb03b }));
   const dotMat = track(new MeshBasicMaterial({ color: 0xfff6e2 }));
   const headGeo = track(new SphereGeometry(0.052, 28, 20));
@@ -154,6 +183,7 @@ export async function createGlobe(canvas: HTMLCanvasElement, opts: GlobeOptions)
     if (!firstDone) { firstDone = true; opts.onFirstFrame?.(); (window as unknown as { __globeReady?: boolean }).__globeReady = true; }
   }
   size();
+  if (opts.bare) (window as unknown as { __orbit?: unknown }).__orbit = projectOrbit(orbit, camera);
 
   function setMode(m: GlobeMode) {
     mode = m;

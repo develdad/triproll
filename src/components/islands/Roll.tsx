@@ -11,6 +11,7 @@ import { submitLead } from '../../lib/leads.ts';
 import ItineraryCard, { makeRef, type MoodImage } from './ItineraryCard.tsx';
 import Timeline from './Timeline.tsx';
 import Globe from './Globe.tsx';
+import OrbitOverlay from './OrbitOverlay.tsx';
 
 type WaitlistWhy = 'other' | 'cap';
 type Phase = 'params' | 'stage' | 'result' | 'request' | 'sent' | 'waitlist';
@@ -329,7 +330,7 @@ export default function Roll({ moods, poster }: { moods: Record<Mood, MoodImage>
         <div className={`roll-flow ${phase === 'stage' ? 'is-stage' : 'is-result'}`}>
           <div className="roll-globe">
             <div className="globe-stage">
-              <div className="poster"><img src={poster.src} width={poster.width} height={poster.height} alt="" role="presentation" decoding="async" /></div>
+              <div className="poster"><OrbitOverlay part="back" /><img src={poster.src} width={poster.width} height={poster.height} alt="" role="presentation" decoding="async" /><OrbitOverlay part="front" /></div>
               <Globe variant={phase === 'stage' ? 'stage' : 'side'} mode={globeMode} />
             </div>
             {phase === 'stage' && <p className="stage-cap" aria-hidden="true">Sealing your rules</p>}

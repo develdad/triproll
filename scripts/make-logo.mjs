@@ -12,7 +12,7 @@ const W = 2712, H = 695;
 const flat = await sharp({ create: { width: W, height: H, channels: 4, background: { ...FOOT, alpha: 1 } } })
   .composite([{ input: await sharp(light).ensureAlpha().toBuffer(), blend: 'dest-in' }])
   .png().toBuffer();
-for (const [h, tag] of [[44, '1x'], [88, '2x']]) {
+for (const [h, tag] of [[43, '1x'], [86, '2x']]) {
   const w = Math.round((h * W) / H);
   const r = sharp(flat).resize(w, h, { kernel: 'lanczos3' });
   await r.clone().webp({ quality: 92, alphaQuality: 100, effort: 6 }).toFile(`public/brand/logo-light-${tag}.webp`);

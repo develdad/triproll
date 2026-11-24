@@ -2,13 +2,15 @@
 import { Image } from 'astro:assets';
 import logo from '../assets/logo.png';
 import { site } from '../site.config';
+import Icon from './Icon.astro';
 const current = Astro.url.pathname.replace(/\.html$/, '') || '/';
+const [cta, ...links] = site.nav;
 ---
 
 <header class="site-header">
   <div class="wrap bar">
     <a href="/" class="brand" aria-label={`${site.business.name} home`}>
-      <Image src={logo} alt={site.business.name} width={117} height={30} densities={[1, 2]} format="webp" quality={85} loading="eager" />
+      <Image src={logo} alt={site.business.name} width={168} height={43} densities={[1, 2]} format="webp" quality={85} loading="eager" />
     </a>
     <nav aria-label="Primary" class="nav">
       {
@@ -19,5 +21,28 @@ const current = Astro.url.pathname.replace(/\.html$/, '') || '/';
         ))
       }
     </nav>
+    <!-- Phones: a no-JavaScript disclosure. The panel is an overlay under the header, so opening it never shifts the page. -->
+    <details class="menu">
+      <summary>
+        <span class="sr-only">Menu</span>
+        <svg class="bars" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <path class="b1" d="M4 7h16" /><path class="b2" d="M4 12h16" /><path class="b3" d="M4 17h16" />
+        </svg>
+      </summary>
+      <nav aria-label="Mobile" class="menu-panel">
+        <ul>
+          {
+            links.map((item) => (
+              <li>
+                <a href={item.href} aria-current={current === item.href ? 'page' : undefined}>
+                  {item.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+        <a class="btn" href={cta.href} aria-current={current === cta.href ? 'page' : undefined}>{cta.label}<Icon name="arrow" size={18} /></a>
+      </nav>
+    </details>
   </div>
 </header>

@@ -37,6 +37,8 @@ type Props = {
   refCode: string;
   passport?: Passport;
   example?: boolean;
+  // Dates that matter that land inside this sealed trip, with the "Plan something for it" checkbox.
+  dateNotes?: { sentences: string[]; plan: boolean; onPlan: (v: boolean) => void };
 };
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -49,9 +51,10 @@ const vetoLabel = (id: string) => VETOES.find((v) => v.id === id)?.label ?? id;
 
 // The sealed request card. It never contains a destination: only the rules, the dates, the package price and
 // general facts computed from the catalog (how many places are in play and a broad climate range).
-export default function ItineraryCard({ sealed: s, airport, archetypeName, mood, refCode, example = false }: Props) {
+export default function ItineraryCard({ sealed: s, airport, archetypeName, mood, refCode, example = false, dateNotes }: Props) {
   const code = airportCode(airport);
   const label = example ? 'Example sealed request with sample numbers' : `Your sealed trip, ${fmtRange(s.start, s.end)}`;
+  const tripLine = [s.tripType, s.tripReason].filter(Boolean).join('. ');
   const rules = [...s.vetoes.map(vetoLabel), s.passport === 'valid' ? 'Valid passport' : 'No passport, domestic only'];
 
   return (
@@ -112,7 +115,20 @@ export default function ItineraryCard({ sealed: s, airport, archetypeName, mood,
               <div><h4>Travel DNA</h4><p>{archetypeName}.</p></div>
             </li>
           )}
+          {tripLine && (
+            <li className="wide">
+              <span className="ic"><Icon name="route" /></span>
+              <div><h4>This trip</h4><p>{tripLine}</p></div>
+            </li>
+          )}
         </ul>
+
+        {dateNotes && dateNotes.sentences.length > 0 && (
+          <div className="date-note" role="group" aria-label="Dates that matter">
+            {dateNotes.sentences.map((t) => <p key={t}>{t} We will tell your planner.</p>)}
+            <label className="check"><input type="checkbox" checked={dateNotes.plan} onChange={(e) => dateNotes.onPlan(e.target.checked)} /><span>Plan something for it</span></label>
+          </div>
+        )}
 
         <div className="tc-perf" aria-hidden="true" />
         <div className="tc-price">

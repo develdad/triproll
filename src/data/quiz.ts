@@ -204,11 +204,11 @@ export const questions: Question[] = sections.flatMap((s) => s.questions);
 export type Brief = {
   climate: string; maxFlight: string; diet: string[]; dietAdventure: string; dietNotes: string; mobility: string[]; mobilityNotes: string;
   lodging: string[]; greats: string[]; greatsText: string; noGos: string[]; noGosText: string;
-  visited: string; withWhom: string; occasion: string; notes: string;
+  visited: string; withWhom: string; notes: string;
 };
 export const EMPTY_BRIEF: Brief = {
   climate: '', maxFlight: '', diet: [], dietAdventure: '', dietNotes: '', mobility: [], mobilityNotes: '', lodging: [],
-  greats: [], greatsText: '', noGos: [], noGosText: '', visited: '', withWhom: '', occasion: '', notes: '',
+  greats: [], greatsText: '', noGos: [], noGosText: '', visited: '', withWhom: '', notes: '',
 };
 export const briefOptions = {
   climate: ['Warm and sunny', 'Mild', 'Cool', 'Snow is fine', 'No preference'],
@@ -220,7 +220,6 @@ export const briefOptions = {
   greats: ['Food', 'Nature', 'History', 'Art', 'Music', 'Nightlife', 'Beaches', 'Hiking', 'Wildlife', 'Wellness', 'Architecture', 'Water sports'],
   noGos: ['Crowds', 'Heights', 'Small boats', 'Long drives', 'Early starts', 'Camping', 'Group tours', 'Raw food', 'Extreme heat', 'Extreme cold'],
   withWhom: ['Solo', 'Partner', 'Friends', 'Family with kids', 'Family, all adults'],
-  occasion: ['None', 'Birthday', 'Anniversary', 'Honeymoon', 'Milestone', 'Celebration'],
 };
 
 export const archetypes: Archetype[] = [

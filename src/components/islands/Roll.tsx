@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
-import { AIRPORTS, CABINS, DELIVERY_OPTIONS, ENTRY_RULE, RESTRICTED_STATES, US_STATES, VETOES, ui } from '../../data/roll.ts';
+import { AIRPORTS, CABINS, DELIVERY_OPTIONS, ENTRY_RULE, RESTRICTED_STATES, TRIP_REASON_MAX, TRIP_TYPES, US_STATES, VETOES, ui } from '../../data/roll.ts';
+import { matchSentence, matchTrip, matchWindow } from '../../lib/dates.ts';
 import { MIN_LEAD_DAYS, fmt, fmtDate, minBudgetPP, type Cabin, type Citizenship, type Flexibility, type Passport, type Veto } from '../../lib/dna.ts';
 import { BUDGET_MAX } from '../../lib/pricing.config.ts';
 import { pay } from '../../data/payment.ts';
@@ -33,7 +34,7 @@ function monthOptions(): { value: string; label: string }[] {
 
 const DEFAULTS: Rules = {
   airport: '', party: 2, budget: 1500, nights: 5, flexibility: 'exact', earliest: '', month: '',
-  citizenship: 'us', passport: 'valid', passportSixMonths: false, vetoes: [], cabin: 'economy', delivery: 'sealed', revealDate: '',
+  citizenship: 'us', passport: 'valid', passportSixMonths: false, vetoes: [], cabin: 'economy', delivery: 'sealed', revealDate: '', tripType: '', tripReason: '',
 };
 type Poster = { src: string; width: number; height: number };
 
@@ -65,6 +66,13 @@ export default function Roll({ moods, poster }: { moods: Record<Mood, MoodImage>
   const belowFloor = hydrated && params.citizenship === 'us' && params.budget < floor;
   const minDate = useMemo(() => (today ? addDays(today, MIN_LEAD_DAYS) : ''), [today]);
   const arch = profile ? archetypeOf(profile) : null;
+  // Dates that matter vs the trip window (rules form) and vs the sealed dates (card). One checkbox covers both.
+  const [planForDates, setPlanForDates] = useState(true);
+  const windowMatches = useMemo(
+    () => (profile && hydrated ? matchWindow(profile.dates, { flexibility: params.flexibility, earliest: params.earliest, month: params.month, nights: params.nights }) : []),
+    [profile, hydrated, params.flexibility, params.earliest, params.month, params.nights],
+  );
+  const cardMatches = useMemo(() => (profile && sealed ? matchTrip(profile.dates, sealed.start, sealed.end) : []), [profile, sealed]);
 
   useEffect(() => {
     const t = isoToday();
@@ -79,6 +87,8 @@ export default function Roll({ moods, poster }: { moods: Record<Mood, MoodImage>
     merged.delivery = merged.delivery === 'date' ? 'date' : 'sealed';
     merged.cabin = (['economy', 'premium', 'business'] as const).includes(merged.cabin as Cabin) ? merged.cabin : 'economy';
     merged.revealDate = typeof merged.revealDate === 'string' ? merged.revealDate : '';
+    merged.tripType = (TRIP_TYPES as readonly string[]).includes(merged.tripType) ? merged.tripType : '';
+    merged.tripReason = typeof merged.tripReason === 'string' ? merged.tripReason.slice(0, TRIP_REASON_MAX) : '';
     setParams(merged);
     setHydrated(true);
     return () => clearTimeout(timer.current);
@@ -155,7 +165,7 @@ export default function Roll({ moods, poster }: { moods: Record<Mood, MoodImage>
       });
       if (r.ok) setSentKind('waitlist');
     } else {
-      r = await submitLead('trip-request', { ...buildRequestPayload(params, sealed, { name: form.name, email: form.email, state: form.state, notes: form.notes }, dnaForm), 'bot-field': form.trap });
+      r = await submitLead('trip-request', { ...buildRequestPayload(params, sealed, { name: form.name, email: form.email, state: form.state, notes: form.notes }, dnaForm, { matches: cardMatches, plan: planForDates }), 'bot-field': form.trap });
       if (r.ok) setSentKind('trip');
     }
     setSending(false);
@@ -256,6 +266,28 @@ export default function Roll({ moods, poster }: { moods: Record<Mood, MoodImage>
               </div>
             )}
             {errors.date && <p className="error">{errors.date}</p>}
+            {windowMatches.length > 0 && (
+              <div className="date-note" role="status">
+                {windowMatches.map((m) => <p key={m.label + m.md}>{matchSentence(m, m.certain)} We will tell your planner.</p>)}
+                <label className="check"><input type="checkbox" checked={planForDates} onChange={(e) => setPlanForDates(e.target.checked)} /><span>Plan something for it</span></label>
+              </div>
+            )}
+          </fieldset>
+
+          <fieldset>
+            <legend>This trip <span className="hint">optional, separate from your Travel DNA</span></legend>
+            <div className="chips" role="radiogroup" aria-label="Trip type">
+              {TRIP_TYPES.map((t) => (
+                <label className="chip" key={t}>
+                  <input type="radio" name="trip_type" checked={params.tripType === t} onChange={() => set('tripType', t)} onClick={() => params.tripType === t && set('tripType', '')} />
+                  <span>{t}</span>
+                </label>
+              ))}
+            </div>
+            <div className="field" style={{ marginTop: '0.9rem' }}>
+              <label htmlFor="trip-reason">Anything this trip is for? <span className="hint">optional</span></label>
+              <input id="trip-reason" name="trip_reason" type="text" maxLength={TRIP_REASON_MAX} autoComplete="off" placeholder="For example, our tenth anniversary" value={params.tripReason} onChange={(e) => set('tripReason', e.target.value)} />
+            </div>
           </fieldset>
 
           <fieldset>
@@ -338,7 +370,7 @@ export default function Roll({ moods, poster }: { moods: Record<Mood, MoodImage>
           {phase !== 'stage' && (
             <div className="roll-card">
               <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>{phase === 'result' ? 'Your sealed card' : 'Request this trip'}</h2>
-              <ItineraryCard sealed={sealed} airport={params.airport} archetypeName={arch?.name ?? null} mood={moods[mood]} refCode={ref} passport={params.passport} />
+              <ItineraryCard sealed={sealed} airport={params.airport} archetypeName={arch?.name ?? null} mood={moods[mood]} refCode={ref} passport={params.passport} dateNotes={cardMatches.length ? { sentences: cardMatches.map((m) => matchSentence(m)), plan: planForDates, onPlan: setPlanForDates } : undefined} />
               <p className="fine">{ui.estimateNote}</p>
               <p className="fine" style={{ marginTop: '0.35rem' }}>{ui.sealedNote}</p>
 

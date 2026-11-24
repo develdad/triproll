@@ -2,11 +2,12 @@
 // "What this means for your trip" statements. Pure functions, covered by tests.
 import { AXES, AXIS_META, archetypes, type Axis, type Brief, type Dna } from '../data/quiz.ts';
 import { matchArchetype } from './dna.ts';
+import { fmtMdShort, hasDates, listDates, type ImportantDates } from './dates.ts';
 import type { StoredProfile } from './storage.ts';
 
 // Compact JSON that goes into the hidden `dna_profile` field on the trip request and waitlist forms.
 export function serializeProfile(p: StoredProfile): string {
-  return JSON.stringify({ v: 3, archetype: p.archetype, axes: p.axes, brief: p.brief });
+  return JSON.stringify({ v: 4, archetype: p.archetype, axes: p.axes, brief: p.brief, dates: p.dates });
 }
 
 export const archetypeOf = (p: { archetype: string; axes: Dna }) => archetypes.find((a) => a.key === p.archetype) ?? matchArchetype(p.axes);
@@ -44,7 +45,7 @@ const list = (xs: string[]) => (xs.length <= 1 ? xs.join('') : xs.slice(0, -1).j
 const lc = (xs: string[]) => xs.map((x) => x.toLowerCase());
 
 // Five or six concrete statements generated from the scores and the planner brief.
-export function implications(d: Dna, b: Brief): string[] {
+export function implications(d: Dna, b: Brief, dates?: ImportantDates): string[] {
   const out: string[] = [];
   const diet = b.diet.filter(Boolean);
   if (diet.length || b.dietNotes.trim()) out.push(`Every meal we suggest will respect your food needs${diet.length ? `: ${list(lc(diet))}` : ''}.`);
@@ -52,7 +53,7 @@ export function implications(d: Dna, b: Brief): string[] {
   if (mob.length || b.mobilityNotes.trim()) out.push(`We will check access before we book: ${list(lc(mob.length ? mob : ['your mobility notes']))}.`);
   const nogos = [...b.noGos, ...(b.noGosText.trim() ? [b.noGosText.trim().toLowerCase()] : [])];
   if (nogos.length) out.push(`We will keep these off your trip: ${list(lc(nogos).slice(0, 4))}.`);
-  if (b.occasion && b.occasion !== 'None') out.push(`We will plan one moment around your ${b.occasion.toLowerCase()}.`);
+  if (dates && hasDates(dates)) out.push('We will notice if a trip lands on one of your dates that matter.');
   const greats = b.greats.length ? b.greats : [];
   if (greats.length) out.push(`We will build the trip around ${list(lc(greats).slice(0, 3))}.`);
   if (b.lodging.length) out.push(`We will look for ${list(lc(b.lodging).slice(0, 2))} stays first.`);
@@ -63,10 +64,10 @@ export function implications(d: Dna, b: Brief): string[] {
   return picked;
 }
 
-export const BRIEF_FIELDS = ['climate', 'maxFlight', 'diet', 'dietAdventure', 'dietNotes', 'mobility', 'mobilityNotes', 'lodging', 'greats', 'greatsText', 'noGos', 'noGosText', 'visited', 'withWhom', 'occasion', 'notes'] as const;
+export const BRIEF_FIELDS = ['climate', 'maxFlight', 'diet', 'dietAdventure', 'dietNotes', 'mobility', 'mobilityNotes', 'lodging', 'greats', 'greatsText', 'noGos', 'noGosText', 'visited', 'withWhom', 'notes'] as const;
 
 // One-line rows for the "Your planner brief" summary card. Empty answers are skipped.
-export function briefRows(b: Brief): { label: string; value: string }[] {
+export function briefRows(b: Brief, dates?: ImportantDates): { label: string; value: string }[] {
   const rows: [string, string][] = [
     ['Climate', b.climate], ['Longest flight', b.maxFlight],
     ['Food', [...b.diet, b.dietAdventure, b.dietNotes].filter(Boolean).join(', ')],
@@ -74,7 +75,9 @@ export function briefRows(b: Brief): { label: string; value: string }[] {
     ['Stay', b.lodging.join(', ')],
     ['Makes a trip great', [...b.greats, b.greatsText].filter(Boolean).join(', ')],
     ['Hard no', [...b.noGos, b.noGosText].filter(Boolean).join(', ')],
-    ['Already been', b.visited], ['Travels with', b.withWhom], ['Occasion', b.occasion === 'None' ? '' : b.occasion], ['Planner notes', b.notes],
+    ['Already been', b.visited], ['Travels with', b.withWhom],
+    ['Dates that matter', dates ? listDates(dates).map((x) => `${x.label}, ${fmtMdShort(x.md)}`).join('; ') : ''],
+    ['Planner notes', b.notes],
   ];
   return rows.filter(([, v]) => v.trim()).map(([label, value]) => ({ label, value }));
 }

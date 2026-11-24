@@ -6,16 +6,19 @@ import { destinations, type Destination } from '../data/destinations.ts';
 import { MAX_ORDER_TOTAL_USD, PRICE_STEP } from './pricing.config.ts';
 import { eligibleSet, pickStart, type Cabin, type Citizenship, type EligibleResult, type Flexibility, type Passport, type Rng, type Veto } from './dna.ts';
 import type { Mood } from '../data/photos.ts';
+import { matchesForPayload, type LabeledDate } from './dates.ts';
 
 export type Delivery = 'sealed' | 'date';
 export type Rules = {
   airport: string; party: number; budget: number; nights: number; flexibility: Flexibility; earliest: string; month: string;
   citizenship: Citizenship; passport: Passport; passportSixMonths: boolean; vetoes: Veto[]; cabin: Cabin; delivery: Delivery; revealDate: string;
+  // Per-trip intake, separate from the Travel DNA profile. tripType is one of TRIP_TYPES or empty.
+  tripType: string; tripReason: string;
 };
 
 export type Sealed = {
   nights: number; party: number; start: string; end: string; perPerson: number; total: number;
-  count: number; climate: string; vetoes: Veto[]; passport: Passport; cabin: Cabin;
+  count: number; climate: string; vetoes: Veto[]; passport: Passport; cabin: Cabin; tripType: string; tripReason: string;
 };
 
 const MS_DAY = 86400000;
@@ -61,7 +64,7 @@ export function sealRules(r: Rules, opts: { today?: string; rng?: Rng } = {}): S
   const start = pickStart({ flexibility: r.flexibility, earliest: r.earliest, month: r.month, today: opts.today, rng: opts.rng });
   const end = iso(Date.parse(start + 'T00:00:00Z') + r.nights * MS_DAY);
   const perPerson = packagePricePP(r.budget);
-  return { ok: true, sealed: { nights: r.nights, party: r.party, start, end, perPerson, total: perPerson * r.party, count: e.count, climate: climateRange(e.set), vetoes: r.vetoes, passport: r.passport, cabin: r.cabin } };
+  return { ok: true, sealed: { nights: r.nights, party: r.party, start, end, perPerson, total: perPerson * r.party, count: e.count, climate: climateRange(e.set), vetoes: r.vetoes, passport: r.passport, cabin: r.cabin, tripType: r.tripType ?? '', tripReason: (r.tripReason ?? '').trim() } };
 }
 
 // Header photo for the sealed card: chosen from the person's vetoes and the season only, never from a destination.
@@ -78,9 +81,11 @@ export function moodForRules(vetoes: Veto[], startISO: string): Mood {
 
 export type RequestContact = { name: string; email: string; state: string; notes: string };
 export type DnaForForm = { archetype: string; profileJson: string } | null;
+// Dates that matter that land inside the sealed trip, and whether the person wants something planned for them.
+export type DateInfo = { matches: LabeledDate[]; plan: boolean };
 
 // The trip-request form fields. No destination identifier, name or coordinates appear anywhere in this object.
-export function buildRequestPayload(r: Rules, s: Sealed, c: RequestContact, dna: DnaForForm): Record<string, string | number | string[]> {
+export function buildRequestPayload(r: Rules, s: Sealed, c: RequestContact, dna: DnaForForm, dateInfo?: DateInfo): Record<string, string | number | string[]> {
   return {
     name: c.name, email: c.email, state: c.state, notes: c.notes,
     departure_airport: r.airport, travelers: r.party, budget_per_person: r.budget, nights: r.nights, flexibility: r.flexibility,
@@ -91,6 +96,8 @@ export function buildRequestPayload(r: Rules, s: Sealed, c: RequestContact, dna:
     cabin: CABIN_LABEL[r.cabin],
     delivery_preference: r.delivery === 'sealed' ? 'keep it sealed until the morning I leave' : 'reveal on a date I choose',
     reveal_date: r.delivery === 'date' ? r.revealDate : '',
+    trip_type: s.tripType, trip_reason: s.tripReason,
+    date_matches: dateInfo ? matchesForPayload(dateInfo.matches) : '', date_plan: dateInfo && dateInfo.matches.length ? (dateInfo.plan ? 'yes' : 'no') : '',
     trip_start: s.start, trip_end: s.end, estimated_total: s.total, estimated_per_person: s.perPerson, destinations_in_play: s.count,
     archetype: dna?.archetype ?? '', dna_profile: dna?.profileJson ?? '',
   };

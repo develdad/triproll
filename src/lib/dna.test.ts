@@ -13,6 +13,8 @@ import { buildRequestPayload, overCap, catalogNames, climateRange, moodForRules,
 import { parseProfile, DNA_KEY } from './storage.ts';
 import { axisExplainer, briefRows, implications, openAxes, serializeProfile, strongestAxes } from './profile.ts';
 import { MOODS } from '../data/photos.ts';
+import { EMPTY_DATES, hasDates, inWindow, listDates, matchTrip, matchWindow, parseDates, parseMd, tripWindows, type ImportantDates } from './dates.ts';
+import { TRIP_TYPES } from '../data/roll.ts';
 
 // Small seeded rng (mulberry32) so failures are reproducible.
 function seeded(seed: number) {
@@ -138,7 +140,7 @@ test('eligible count respects the budget rule, passport, vetoes and entry rules'
 });
 
 function baseRules(): Rules {
-  return { airport: 'PHX', party: 2, budget: 1800, nights: 5, flexibility: 'exact', earliest: '2027-03-14', month: '', citizenship: 'us', passport: 'valid', passportSixMonths: true, vetoes: [], cabin: 'economy', delivery: 'sealed', revealDate: '' };
+  return { airport: 'PHX', party: 2, budget: 1800, nights: 5, flexibility: 'exact', earliest: '2027-03-14', month: '', citizenship: 'us', passport: 'valid', passportSixMonths: true, vetoes: [], cabin: 'economy', delivery: 'sealed', revealDate: '', tripType: '', tripReason: '' };
 }
 
 test('the request payload and sealed summary never carry a destination identifier, name or country', () => {
@@ -149,7 +151,7 @@ test('the request payload and sealed summary never carry a destination identifie
     const rules: Rules = { ...baseRules(), party: 1 + Math.floor(rng() * 8), nights: 2 + Math.floor(rng() * 9), budget: 1500 + Math.floor(rng() * 4500), vetoes: (['no-cold', 'no-beaches'] as Veto[]).filter(() => rng() < 0.4), delivery: rng() < 0.5 ? 'sealed' : 'date', revealDate: '2027-03-01' };
     const r = sealRules(rules, { today: TODAY, rng });
     if (!r.ok) continue;
-    const payload = buildRequestPayload(rules, r.sealed, { name: 'Pat Doe', email: 'pat@example.com', state: 'AZ', notes: '' }, { archetype: 'trailblazer', profileJson: serializeProfile({ v: 3, axes: scoreQuiz(randomAnswers(rng)), archetype: 'trailblazer', brief: EMPTY_BRIEF }) });
+    const payload = buildRequestPayload(rules, r.sealed, { name: 'Pat Doe', email: 'pat@example.com', state: 'AZ', notes: '' }, { archetype: 'trailblazer', profileJson: serializeProfile({ v: 4, axes: scoreQuiz(randomAnswers(rng)), archetype: 'trailblazer', brief: EMPTY_BRIEF, dates: EMPTY_DATES }) });
     const blob = JSON.stringify([payload, r.sealed]);
     assert.ok(!re.test(blob), `destination leaked: ${blob.match(re)?.[0]}`);
     for (const k of Object.keys(payload)) assert.ok(!/^destination(_id|_name)?$|reveal(?!_date)|reroll/i.test(k), k);
@@ -284,11 +286,20 @@ test('copy: entry rule appears in FAQ, how it works and roll copy; no dashes as 
 test('storage v3: valid profiles parse, older six-axis shapes are discarded', () => {
   assert.equal(DNA_KEY, 'triproll_dna');
   const axes = scoreQuiz(randomAnswers(seeded(4)));
-  const ok = parseProfile({ v: 3, axes, archetype: 'trailblazer', brief: { diet: ['Vegan'], noGos: 7 } });
-  assert.ok(ok && ok.v === 3 && ok.brief.diet[0] === 'Vegan' && ok.brief.noGos.length === 0);
+  const ok = parseProfile({ v: 4, axes, archetype: 'trailblazer', brief: { diet: ['Vegan'], noGos: 7 }, dates: { self: '03-04', anniversary: '13-40', children: [{ name: ' Maya ', md: '10-02' }, { name: '', md: '' }] } });
+  assert.ok(ok && ok.v === 4 && ok.brief.diet[0] === 'Vegan' && ok.brief.noGos.length === 0);
+  assert.equal(ok.dates.self, '03-04');
+  assert.equal(ok.dates.anniversary, '');
+  assert.deepEqual(ok.dates.children, [{ name: 'Maya', md: '10-02' }]);
+  // A saved v3 profile migrates: same axes and brief, the occasion is dropped, dates start empty.
+  const old = parseProfile({ v: 3, axes, archetype: 'trailblazer', brief: { diet: ['Vegan'], occasion: 'Anniversary' }, dates: { self: '01-01' } });
+  assert.ok(old && old.v === 4 && old.brief.diet[0] === 'Vegan' && !('occasion' in old.brief) && !hasDates(old.dates));
+  assert.deepEqual(parseProfile(JSON.parse(serializeProfile(old))), { ...old });
   assert.equal(parseProfile({ dna: { adventure: 0.5, social: 0.5, structure: 0.5, cultural: 0.5, budget: 0.5, energy: 0.5 }, passport: 'valid', archetype: 'sunseeker' }), null);
   assert.equal(parseProfile({ v: 2, axes }), null);
+  assert.equal(parseProfile({ v: 5, axes }), null);
   assert.equal(parseProfile({ v: 3, axes: { ...axes, pace: 4 } }), null);
+  assert.equal(parseProfile({ v: 4, axes: { ...axes, pace: 4 } }), null);
   assert.equal(parseProfile(null), null);
   assert.equal(parseProfile('x'), null);
 });
@@ -301,12 +312,17 @@ test('profile insights: strongest and open axes, 5 or 6 implications, brief summ
   for (const a of AXES) assert.ok(axisExplainer(a, dna[a]).length > 20);
   const empty = implications(dna, EMPTY_BRIEF);
   assert.ok(empty.length >= 5 && empty.length <= 6);
-  const brief = { ...EMPTY_BRIEF, diet: ['Gluten-free'], noGos: ['Heights'], occasion: 'Anniversary', greats: ['Food', 'History'], mobility: ['Avoid stairs'] };
-  // The first four brief statements win, in the order food, access, hard no's, occasion.
-  const full = implications(dna, brief);
+  const brief = { ...EMPTY_BRIEF, diet: ['Gluten-free'], noGos: ['Heights'], greats: ['Food', 'History'], mobility: ['Avoid stairs'] };
+  // The first four brief statements win, in the order food, access, hard no's, dates that matter.
+  const dates: ImportantDates = { ...EMPTY_DATES, anniversary: '06-12', children: [{ name: 'Maya', md: '10-02' }] };
+  const full = implications(dna, brief, dates);
   assert.ok(full.length >= 5 && full.length <= 6);
-  assert.ok(full.join(' ').includes('gluten-free') && full.join(' ').includes('heights') && full.join(' ').includes('anniversary'));
+  assert.ok(full.join(' ').includes('gluten-free') && full.join(' ').includes('heights') && full.join(' ').includes('dates that matter'));
   assert.equal(briefRows(EMPTY_BRIEF).length, 0);
+  assert.equal(briefRows(EMPTY_BRIEF, EMPTY_DATES).length, 0);
+  const dateRow = briefRows(brief, dates).find((r) => r.label === 'Dates that matter');
+  assert.equal(dateRow?.value, 'Your anniversary, Jun 12; Maya\'s birthday, Oct 2');
+  assert.ok(!/\d{4}/.test(dateRow?.value ?? ''));
   assert.ok(briefRows(brief).some((r) => r.label === 'Hard no'));
   const slow = implications({ ...dna, pace: 0.02, novelty: 0.5, setting: 0.5, comfort: 0.5, social: 0.5, structure: 0.5, culture: 0.5, activity: 0.5 }, EMPTY_BRIEF);
   assert.ok(slow[0].includes('no more than one booked thing a day'));
@@ -378,4 +394,110 @@ test('reveal timing copy: no at-confirmation option, step four names the reveal 
   assert.equal(DELIVERY_OPTIONS[0].id, 'sealed');
   assert.ok(!JSON.stringify(DELIVERY_OPTIONS).includes('confirmation'));
   assert.equal(stepText(variants.off[3]), 'Your itinerary arrives the morning you leave, or on the reveal date you picked.');
+});
+
+// ---- Dates that matter and the trip intake ----
+const rulesFor = (flexibility: 'exact' | 'pm3' | 'month', earliest: string, nights: number, month = '') => ({ flexibility, earliest, month, nights });
+const withDates = (p: Partial<ImportantDates>): ImportantDates => ({ ...EMPTY_DATES, children: [], ...p });
+
+test('dates: month and day only, validated, Feb 29 allowed, never a year', () => {
+  assert.equal(parseMd('02-29'), '02-29');
+  assert.equal(parseMd('02-30'), '');
+  assert.equal(parseMd('13-01'), '');
+  assert.equal(parseMd('2027-06-12'), '');
+  assert.equal(parseMd(5), '');
+  const d = parseDates({ self: '06-12', anniversary: '2020-06-12', children: new Array(12).fill({ name: 'Kid', md: '01-02' }) });
+  assert.equal(d.self, '06-12');
+  assert.equal(d.anniversary, '');
+  assert.equal(d.children.length, 8);
+  assert.deepEqual(listDates(withDates({ partner: '08-09', children: [{ name: '', md: '03-03' }, { name: 'Maya', md: '' }] })).map((x) => x.label), ["Your partner's birthday", "A child's birthday"]);
+});
+
+test('date match: an exact window includes the departure and return days and nothing outside', () => {
+  const d = withDates({ anniversary: '06-12' });
+  assert.equal(matchWindow(d, rulesFor('exact', '2027-06-10', 5)).length, 1); // Jun 10 to 15
+  assert.equal(matchWindow(d, rulesFor('exact', '2027-06-12', 3)).length, 1); // departure day
+  assert.equal(matchWindow(d, rulesFor('exact', '2027-06-09', 3)).length, 1); // return day, Jun 12
+  assert.equal(matchWindow(d, rulesFor('exact', '2027-06-13', 4)).length, 0);
+  assert.equal(matchWindow(d, rulesFor('exact', '2027-06-01', 5)).length, 0);
+  assert.ok(matchWindow(d, rulesFor('exact', '2027-06-10', 5))[0].certain);
+});
+
+test('date match: flexibility widens the window and marks edge dates as possible, not certain', () => {
+  const d = withDates({ self: '06-12' });
+  // Plus or minus 3 days around Jun 14 with 4 nights: departure Jun 11 to 17, so Jun 12 is reachable but not sure.
+  const m = matchWindow(d, rulesFor('pm3', '2027-06-14', 4));
+  assert.equal(m.length, 1);
+  assert.equal(m[0].certain, false);
+  // Departing Jun 11 to 17 for 9 nights: every allowed trip covers Jun 17 to 20, so Jun 18 is sure and Jun 12 is only possible.
+  assert.equal(matchWindow(withDates({ self: '06-18' }), rulesFor('pm3', '2027-06-14', 9))[0].certain, true);
+  assert.equal(matchWindow(d, rulesFor('pm3', '2027-06-14', 9))[0].certain, false);
+  assert.equal(matchWindow(d, rulesFor('pm3', '2027-06-25', 4)).length, 0);
+  // Anytime in a month: the whole month plus the nights after, and never certain for a short trip.
+  const mo = matchWindow(d, rulesFor('month', '', 5, '2027-06'));
+  assert.equal(mo.length, 1);
+  assert.equal(mo[0].certain, false);
+  assert.equal(matchWindow(d, rulesFor('month', '', 5, '2027-07')).length, 0);
+  assert.equal(matchWindow(withDates({ self: '07-03' }), rulesFor('month', '', 5, '2027-06')).length, 1); // a Jun 30 departure reaches Jul 3
+  assert.equal(matchWindow(withDates({ self: '07-06' }), rulesFor('month', '', 5, '2027-06')).length, 0);
+  assert.equal(tripWindows(rulesFor('month', '', 5, 'bad')), null);
+  assert.equal(matchWindow(d, rulesFor('exact', '', 5)).length, 0);
+});
+
+test('date match: windows that cross a year boundary', () => {
+  const ny = withDates({ self: '01-01', partner: '12-31', anniversary: '12-20' });
+  const m = matchWindow(ny, rulesFor('exact', '2027-12-28', 6)); // Dec 28 to Jan 3
+  assert.deepEqual(m.map((x) => x.md).sort(), ['01-01', '12-31']);
+  assert.equal(matchWindow(ny, rulesFor('exact', '2027-12-21', 3)).length, 0);
+  assert.equal(matchWindow(withDates({ self: '01-02' }), rulesFor('pm3', '2027-12-30', 3)).length, 1); // departure up to Jan 2, in the window
+  assert.ok(inWindow('12-31', '2026-12-30', '2027-01-04'));
+  assert.ok(inWindow('01-01', '2026-12-30', '2027-01-04'));
+  assert.ok(!inWindow('01-05', '2026-12-30', '2027-01-04'));
+  // A trip long enough to span two new years still matches once without error.
+  assert.ok(inWindow('06-01', '2026-12-30', '2028-01-02'));
+  assert.deepEqual(matchTrip(ny, '2027-12-30', '2028-01-02').map((x) => x.md).sort(), ['01-01', '12-31']);
+});
+
+test('date match: Feb 29 birthdays match Feb 29 in leap years and Feb 28 or Mar 1 otherwise', () => {
+  const leap = withDates({ self: '02-29' });
+  assert.equal(matchTrip(leap, '2028-02-27', '2028-03-02').length, 1); // 2028 is a leap year
+  assert.equal(matchTrip(leap, '2028-02-27', '2028-02-28').length, 0);
+  assert.equal(matchTrip(leap, '2028-03-01', '2028-03-04').length, 0);
+  assert.equal(matchTrip(leap, '2027-02-26', '2027-03-01').length, 1); // common year: observed Feb 28 or Mar 1
+  assert.equal(matchTrip(leap, '2027-03-01', '2027-03-05').length, 1);
+  assert.equal(matchTrip(leap, '2027-02-20', '2027-02-27').length, 0);
+  assert.equal(matchTrip(leap, '2027-03-02', '2027-03-08').length, 0);
+  assert.equal(matchWindow(leap, rulesFor('exact', '2027-02-26', 3)).length, 1);
+  assert.equal(matchWindow(withDates({ self: '02-28' }), rulesFor('exact', '2028-02-29', 2)).length, 0);
+  assert.equal(inWindow('02-29', '2099-12-30', '2100-03-02'), true); // 2100 is not a leap year, observed on Feb 28 or Mar 1
+});
+
+test('trip intake: type and reason travel on the sealed card and in the request payload; matches carry no year', () => {
+  assert.equal(TRIP_TYPES.length, 8);
+  for (const need of ['Romantic', 'Adventure', 'Celebration', 'Family time', 'Friends', 'Rest and reset', 'Solo', 'Just because']) assert.ok((TRIP_TYPES as readonly string[]).includes(need), need);
+  for (const f of ['trip_type', 'trip_reason', 'date_matches', 'date_plan']) assert.ok((FORM_FIELDS['trip-request'] as readonly string[]).includes(f), f);
+  const rules: Rules = { ...baseRules(), tripType: 'Celebration', tripReason: '  Our tenth anniversary  ', earliest: '2027-06-10' };
+  const res = sealRules(rules, { today: TODAY });
+  assert.ok(res.ok);
+  if (!res.ok) return;
+  assert.equal(res.sealed.tripType, 'Celebration');
+  assert.equal(res.sealed.tripReason, 'Our tenth anniversary');
+  const dates = withDates({ anniversary: '06-12', children: [{ name: 'Maya', md: '06-14' }, { name: 'Leo', md: '09-01' }] });
+  const matches = matchTrip(dates, res.sealed.start, res.sealed.end);
+  assert.equal(matches.length, 2);
+  const payload = buildRequestPayload(rules, res.sealed, { name: 'Pat', email: 'pat@example.com', state: 'AZ', notes: '' }, { archetype: 'sunseeker', profileJson: serializeProfile({ v: 4, axes: scoreQuiz(randomAnswers(seeded(2))), archetype: 'sunseeker', brief: EMPTY_BRIEF, dates }) }, { matches, plan: true });
+  assert.equal(payload.trip_type, 'Celebration');
+  assert.equal(payload.trip_reason, 'Our tenth anniversary');
+  assert.equal(payload.date_matches, "Your anniversary (06-12); Maya's birthday (06-14)");
+  assert.equal(payload.date_plan, 'yes');
+  assert.ok(!/\b(19|20)\d\d\b/.test(String(payload.date_matches)));
+  const profile = JSON.parse(String(payload.dna_profile));
+  assert.equal(profile.v, 4);
+  assert.equal(profile.dates.anniversary, '06-12');
+  assert.equal(profile.dates.children[0].name, 'Maya');
+  // Unchecked box is recorded as no; no matches means empty fields.
+  assert.equal(buildRequestPayload(rules, res.sealed, { name: 'a', email: 'b@c.de', state: 'AZ', notes: '' }, null, { matches, plan: false }).date_plan, 'no');
+  const none = buildRequestPayload(rules, res.sealed, { name: 'a', email: 'b@c.de', state: 'AZ', notes: '' }, null);
+  assert.equal(none.date_matches, '');
+  assert.equal(none.date_plan, '');
 });

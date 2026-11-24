@@ -36,6 +36,11 @@ export const VETOES: { id: Veto; label: string }[] = [
   { id: 'no-remote', label: 'No remote' },
 ];
 
+// Per-trip intake (separate from the Travel DNA profile). Single select.
+export const TRIP_TYPES = ['Romantic', 'Adventure', 'Celebration', 'Family time', 'Friends', 'Rest and reset', 'Solo', 'Just because'] as const;
+export type TripType = (typeof TRIP_TYPES)[number];
+export const TRIP_REASON_MAX = 120;
+
 export const BAND_LABEL = { short: 'Short haul, under 4 h', medium: 'Medium haul, 4 to 8 h', long: 'Long haul, over 8 h' } as const;
 
 export const DELIVERY_OPTIONS = [

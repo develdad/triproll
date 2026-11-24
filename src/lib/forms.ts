@@ -6,7 +6,7 @@ export const FORM_FIELDS = {
     'name', 'email', 'state', 'notes',
     'departure_airport', 'travelers', 'budget_per_person', 'nights', 'flexibility', 'earliest_departure', 'month',
     'citizenship', 'passport', 'passport_valid_six_months', 'vetoes', 'cabin', 'delivery_preference', 'reveal_date',
-    'trip_start', 'trip_end', 'estimated_total', 'estimated_per_person', 'destinations_in_play',
+    'trip_type', 'trip_reason', 'date_matches', 'date_plan', 'trip_start', 'trip_end', 'estimated_total', 'estimated_per_person', 'destinations_in_play',
     'archetype', 'dna_profile',
   ],
   waitlist: ['name', 'email', 'state', 'source', 'citizenship', 'archetype', 'dna_profile', 'note'],

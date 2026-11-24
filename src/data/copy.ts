@@ -149,7 +149,7 @@ export const travelDna = {
   briefBody: [
     'After the scenarios you can tell your planner things directly. Every question is optional.',
     'You can share your climate preference, your longest flight and your food needs. You can add access needs, your lodging style and what makes a trip great for you.',
-    'You can also list your hard no\'s, places you have already been and who you travel with. Add an occasion and anything else your planner should know.',
+    'You can also list your hard no\'s, places you have already been and who you travel with. You can add the dates that matter to you, such as birthdays and an anniversary, as month and day only, and anything else your planner should know.',
     'A person reads your profile and brief when building your trip.',
   ],
   archetypesTitle: 'The eight archetypes',

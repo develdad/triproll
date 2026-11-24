@@ -1,33 +1,32 @@
-// Travel DNA scoring and the weighted trip roll. Ported from v2 with the same mechanics:
-// answers are averaged per axis, archetypes are matched by squared distance, destinations are
-// weighted by affinity cubed. Pricing rules (package price, cost ceiling, floors) live in pricing.config.ts.
+// Travel DNA scoring and the (future) weighted trip roll. Answers are averaged per axis, archetypes are matched by
+// squared distance, destinations are weighted by affinity cubed. NOTHING in the UI calls rollTrip for display:
+// under the fixed-package model the site never picks, stores or reveals a destination before a request is confirmed.
+// rollTrip stays for future use and for tests. Pricing rules live in pricing.config.ts.
 // Pure functions with an injectable rng and clock so they can be tested.
-import { archetypes, type Answer, type Archetype, type Axis, type Dna } from '../data/quiz.ts';
+import { AXES, archetypes, type Answer, type Archetype, type Dna } from '../data/quiz.ts';
 import { destinations, toPublic, type Destination, type PublicDestination } from '../data/destinations.ts';
-import { BUDGET_MAX, COST_CEILING, EXTRAS_RATE, FLOOR_OVERALL, FLOOR_PER_NIGHT, PRICE_STEP, SEASON_MAX } from './pricing.config.ts';
+import { BETA_ALLOW_PREREG, BUDGET_MAX, CABIN_FLOOR_MULT, MAX_ADVISORY_LEVEL, COST_CEILING, EXTRAS_RATE, FLOOR_OVERALL, FLOOR_PER_NIGHT, MIN_ELIGIBLE, PRICE_STEP, SEASON_MAX } from './pricing.config.ts';
 
-export const AXES: Axis[] = ['adventure', 'social', 'structure', 'cultural', 'budget', 'energy'];
-
+export { AXES };
 export type Passport = 'valid' | 'none';
+export type Citizenship = 'us' | 'other';
 export type Veto = 'no-beaches' | 'no-cold' | 'no-long-haul' | 'no-cities' | 'no-remote';
 export type Flexibility = 'exact' | 'pm3' | 'month';
 export type Rng = () => number;
 
-export function scoreQuiz(chosen: Answer[]): { dna: Dna; passport: Passport } {
+export function scoreQuiz(chosen: Answer[]): Dna {
   const sums = {} as Dna;
   const counts = {} as Dna;
   AXES.forEach((a) => { sums[a] = 0; counts[a] = 0; });
-  let passport: Passport = 'valid';
   chosen.forEach((ans) => {
-    if (ans.passport) passport = ans.passport;
-    (Object.entries(ans.dna || {}) as [Axis, number][]).forEach(([axis, w]) => {
-      sums[axis] += w;
+    (Object.entries(ans.dna || {}) as [keyof Dna, number][]).forEach(([axis, v]) => {
+      sums[axis] += v;
       counts[axis] += 1;
     });
   });
   const dna = {} as Dna;
   AXES.forEach((a) => { dna[a] = counts[a] ? +(sums[a] / counts[a]).toFixed(2) : 0.5; });
-  return { dna, passport };
+  return dna;
 }
 
 export function matchArchetype(dna: Dna): Archetype {
@@ -75,8 +74,13 @@ export type RollResult =
   | { ok: true; trip: Trip }
   | { ok: false; reason: 'no-match' | 'exhausted' | 'below-floor'; minBudget?: number };
 
+// Hard rules for one destination: passport, vetoes, beta entry rules and the no-vaccination rule.
+// Beta serves US passport holders only, so `entry` is read for a US passport.
 export function passesFilters(d: Destination, passport: Passport, vetoes: Veto[]): boolean {
   if (passport === 'none' && !d.domestic) return false;
+  if (d.vaccineRequired) return false;
+  if (d.entry === 'prereg' && !BETA_ALLOW_PREREG) return false;
+  if (d.advisoryLevel !== null && d.advisoryLevel > MAX_ADVISORY_LEVEL) return false;
   if (vetoes.includes('no-beaches') && d.beach) return false;
   if (vetoes.includes('no-cold') && d.cold) return false;
   if (vetoes.includes('no-long-haul') && d.hours > 8) return false;
@@ -99,11 +103,41 @@ export const packagePrice = (budgetPP: number) => Math.floor(budgetPP / PRICE_ST
 
 // Lowest per-person budget that can produce a trip for these inputs: the cheapest eligible destination at
 // maximum seasonal cost must sit at or below the cost ceiling, and never below the hard floors.
-export function minBudgetPP(nights: number, party: number, passport: Passport, vetoes: Veto[] = []): number {
+export type Cabin = 'economy' | 'premium' | 'business';
+export function minBudgetPP(nights: number, party: number, passport: Passport, vetoes: Veto[] = [], cabin: Cabin = 'economy'): number {
   const pool = destinations.filter((d) => passesFilters(d, passport, vetoes));
   const costs = pool.map((d) => internalCostPP(d, party, nights));
-  const byCost = costs.length ? roundUp(Math.min(...costs) / COST_CEILING, PRICE_STEP) : BUDGET_MAX;
-  return Math.max(byCost, FLOOR_PER_NIGHT * nights, FLOOR_OVERALL);
+  // The budget must keep at least MIN_ELIGIBLE destinations in play, so the floor follows the Nth cheapest.
+  const sorted = [...costs].sort((x, y) => x - y);
+  const anchor = sorted[Math.min(MIN_ELIGIBLE, sorted.length) - 1];
+  const byCost = sorted.length ? roundUp(anchor / COST_CEILING, PRICE_STEP) : BUDGET_MAX;
+  const base = Math.max(byCost, FLOOR_PER_NIGHT * nights, FLOOR_OVERALL);
+  return roundUp(base * CABIN_FLOOR_MULT[cabin], PRICE_STEP);
+}
+
+export type EligibleInput = { passport?: Passport; party?: number; budgetPP?: number; nights?: number; vetoes?: Veto[]; cabin?: Cabin };
+export type EligibleResult =
+  | { ok: true; set: Destination[]; count: number }
+  | { ok: false; reason: 'below-floor' | 'too-few'; minBudget?: number; count: number };
+
+// The destinations that pass every rule: passport, vetoes, entry rules, no vaccination, and the budget cost ceiling.
+// Used to size a request ("N destinations in play"). Never used to choose or show a destination.
+export function eligibleSet(p: EligibleInput): EligibleResult {
+  const passport = p.passport ?? 'valid';
+  const party = Math.min(8, Math.max(1, Math.round(p.party ?? 2)));
+  const nights = Math.min(10, Math.max(2, Math.round(p.nights ?? 5)));
+  const cabin = p.cabin ?? 'economy';
+  // A higher cabin spends more of the budget on flights, so the economy-equivalent budget is smaller.
+  const budget = (p.budgetPP ?? BUDGET_MAX) / CABIN_FLOOR_MULT[cabin];
+  const vetoes = p.vetoes ?? [];
+  const filtered = destinations.filter((d) => passesFilters(d, passport, vetoes));
+  if (filtered.length < MIN_ELIGIBLE) return { ok: false, reason: 'too-few', count: filtered.length };
+  if (budget < FLOOR_PER_NIGHT * nights || budget < FLOOR_OVERALL) {
+    return { ok: false, reason: 'below-floor', minBudget: minBudgetPP(nights, party, passport, vetoes, cabin), count: 0 };
+  }
+  const set = filtered.filter((d) => internalCostPP(d, party, nights) <= budget * COST_CEILING);
+  if (set.length < MIN_ELIGIBLE) return { ok: false, reason: 'below-floor', minBudget: minBudgetPP(nights, party, passport, vetoes, cabin), count: set.length };
+  return { ok: true, set, count: set.length };
 }
 
 const MS_DAY = 86400000;
@@ -142,13 +176,9 @@ export function rollTrip(p: RollParams = {}): RollResult {
   const vetoes = p.vetoes ?? [];
   const exclude = p.exclude ?? [];
 
-  const eligible = destinations.filter((d) => passesFilters(d, passport, vetoes));
-  if (!eligible.length) return { ok: false, reason: 'no-match' };
-  const affordable = eligible.filter((d) => internalCostPP(d, party, nights) <= budget * COST_CEILING);
-  if (!affordable.length || budget < FLOOR_PER_NIGHT * nights || budget < FLOOR_OVERALL) {
-    return { ok: false, reason: 'below-floor', minBudget: minBudgetPP(nights, party, passport, vetoes) };
-  }
-  const pool = affordable.filter((d) => !exclude.includes(d.id));
+  const elig = eligibleSet({ passport, party, nights, budgetPP: budget, vetoes });
+  if (!elig.ok) return elig.reason === 'too-few' ? { ok: false, reason: 'no-match' } : { ok: false, reason: 'below-floor', minBudget: elig.minBudget };
+  const pool = elig.set.filter((d) => !exclude.includes(d.id));
   if (!pool.length) return { ok: false, reason: 'exhausted' };
 
   let dest: Destination;
@@ -186,7 +216,7 @@ export function packingHints(d: PublicDestination): string[] {
   else if (/hot|tropical/i.test(d.climate)) out.push('Light, breathable clothing');
   else out.push('Layers for changing weather');
   if (d.beach) out.push('Swimsuit and reef-safe sunscreen');
-  if (d.dna.adventure >= 0.7 || d.remote) out.push('Broken-in trail shoes');
+  if (d.dna.activity >= 0.7 || d.remote) out.push('Broken-in trail shoes');
   else if (d.city) out.push('Comfortable walking shoes');
   if (!d.domestic) out.push('Plug adapter and a card with no foreign fees');
   if (d.remote) out.push('Rain shell and a refillable bottle');

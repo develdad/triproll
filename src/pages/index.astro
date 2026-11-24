@@ -8,11 +8,12 @@ import ItineraryCard from '../components/islands/ItineraryCard.tsx';
 import Timeline from '../components/islands/Timeline.tsx';
 import globePoster from '../assets/globe-poster.webp';
 import { photos } from '../lib/photos';
-import { PHOTO_ALT, MOOD_PHOTO, moodFor } from '../data/photos';
-import { exampleTrip, exampleAirport } from '../data/example';
+import { PHOTO_ALT, MOOD_PHOTO } from '../data/photos';
+import { moodForRules } from '../lib/request';
+import { exampleSealed, exampleAirport } from '../data/example';
 import { home, faqs } from '../data/copy';
 
-const moodKey = moodFor(exampleTrip.dest);
+const moodKey = moodForRules(exampleSealed.vetoes, exampleSealed.start);
 const photoKey = MOOD_PHOTO[moodKey];
 const m = await getImage({ src: photos[photoKey], width: 900, format: 'webp', quality: 70 });
 const mood = { src: m.src, alt: PHOTO_ALT[photoKey], width: m.attributes.width as number, height: m.attributes.height as number };
@@ -46,7 +47,7 @@ const includedIcons = ['plane', 'bed', 'car', 'compass', 'bag', 'lock'] as const
         </div>
       </div>
       <div class="hero-pass">
-        <ItineraryCard trip={exampleTrip} airport={exampleAirport} revealed={false} dna={null} mood={mood} refCode="TR-SAMPLE" example />
+        <ItineraryCard sealed={exampleSealed} airport={exampleAirport} archetypeName={null} mood={mood} refCode="TR-SAMPLE" example />
         <p class="fine">{home.exampleNote}</p>
       </div>
     </div>

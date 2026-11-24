@@ -69,7 +69,7 @@ const raw = {
     type: 'TravelAgency',
     tagline: 'Spin the globe. Get a trip.',
     description:
-      'Set your budget, dates and rules, take the Travel DNA quiz, and roll. TripRoll plans a priced surprise trip and keeps the destination sealed until you fly.',
+      'Set your budget, dates and rules, take the Travel DNA assessment, and request a surprise trip. A person plans it and keeps the place sealed until you fly.',
     logo: '/logo.png',
     sameAs: [],
   },

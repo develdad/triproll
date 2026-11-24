@@ -38,29 +38,37 @@ export const VETOES: { id: Veto; label: string }[] = [
 
 export const BAND_LABEL = { short: 'Short haul, under 4 h', medium: 'Medium haul, 4 to 8 h', long: 'Long haul, over 8 h' } as const;
 
-// Beta order flow, shown as a 4-step timeline on the trip card and in the request step.
-export const TIMELINE = [
-  { title: 'Requested', body: 'You send your roll. No payment step yet.' },
-  { title: 'Reviewed by a person', body: 'Within 72 hours, before any card is charged.' },
-  { title: 'Confirmed and charged', body: 'Payment is collected only at confirmation.' },
-  { title: 'Itinerary delivered', body: 'The morning you leave, or sooner if you chose to reveal.' },
+export const DELIVERY_OPTIONS = [
+  { id: 'sealed', label: 'Keep it sealed until the morning I leave' },
+  { id: 'date', label: 'Reveal on a date I choose' },
 ] as const;
 
+// Beta entry rules, one sentence reused wherever the rule is explained.
+export const CABINS = [
+  { id: 'economy', label: 'Economy' },
+  { id: 'premium', label: 'Premium economy' },
+  { id: 'business', label: 'Business' },
+] as const;
+
+export const ENTRY_RULE = 'During beta we only plan trips to places a US passport holder can enter with no advance visa, no pre-registration and no required vaccinations. The list grows after beta.';
+
 export const ui = {
-  steps: ['Parameters', 'Roll', 'Request'],
-  paramsTitle: 'Set the rules',
-  paramsIntro: 'These are hard rules. Every roll stays inside them.',
-  rollButton: 'Roll the trip',
-  rolling: 'Rolling. Building a trip inside your rules.',
-  rerollLimit: 'You have used all 3 rerolls for these rules. Change a rule to start a fresh set of rolls.',
-  exhausted: 'Every destination that fits your rules has been rolled already. Loosen a rule to see more.',
-  noMatch: 'No destination fits all of your rules. Remove a veto or change your passport status.',
-  belowFloor: (min: string) => `This trip length needs at least ${min} per person. Raise your budget or shorten the trip.`,
-  estimateNote: 'Estimated package price, per person and total. It becomes final only when a person confirms your trip.',
-  revealNote: 'Peeking is your call. The reveal preference you chose is sent with your request.',
-  restrictedNote: `TripRoll cannot sell travel to residents of ${RESTRICTED_NAMES} yet. Choose one of these and we will add you to the waitlist instead of taking a trip request.`,
-  requestNote: 'This is a request, not a booking. There is no payment step yet. A person reviews every order within 72 hours, and payment is collected only at confirmation.',
-  successTrip: 'Request received. A person reviews your order within 72 hours, before any card is charged. If the trip cannot be built inside your rules, you owe nothing and can roll again free. If it is confirmed, you get the confirmation and packing list, and tickets and the full itinerary arrive the morning you leave.',
-  successWaitlist: 'You are on the waitlist. We will email you if TripRoll opens to residents of your state. No trip request was created.',
+  steps: ['Rules', 'Sealed card', 'Request'],
+  paramsTitle: 'Set your rules',
+  paramsIntro: 'These are hard rules. Your trip stays inside them.',
+  sealButton: 'Seal my rules',
+  sealing: 'Sealing your rules and counting the places that fit.',
+  belowFloor: (min: string) => `This trip needs at least ${min} per person. Raise your budget or shorten the trip.`,
+  overCap: 'Beta trips are capped at $10,000 per order. Reduce your travelers or budget, or join the waitlist for larger trips.',
+  revealHelp: 'Good for a birthday or an anniversary. The date must be before you leave.',
+  tooFew: 'Too few places fit these rules. Loosen a rule, such as a veto, and try again.',
+  otherCitizen: 'During beta we plan trips for US passport holders only. Join the waitlist and we will tell you when that changes.',
+  estimateNote: 'This is your package price. A person builds and books the real trip after you request it.',
+  restrictedNote: `TripRoll cannot sell travel to residents of ${RESTRICTED_NAMES} yet. Choose one of these states and we will add you to the waitlist instead.`,
   submitError: 'That did not send. Check your connection and try again.',
+  successTrip: 'Request received. A person reviews it within 72 hours and emails you.',
+  successWaitlist: 'You are on the waitlist. We will email you if TripRoll opens to you. No trip request was created.',
+  passportLabel: 'My passport is valid for at least six months after my return date.',
+  sealedNote: 'The place stays out of this page on purpose. A person picks it inside your rules after you request.',
+  packingNote: 'Your packing list arrives at confirmation.',
 };

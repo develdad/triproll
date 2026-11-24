@@ -18,16 +18,40 @@ Two forms: `trip-request` and `waitlist`. Field lists live in `src/lib/forms.ts`
 Replace the body of `submitLead` in `src/lib/leads.ts` with an insert (a Netlify Function holding the service key, or an RLS-limited anon insert). Keep the signature `(formName, fields) => Promise<{ok}>`. Keep the static form defs until Netlify Forms is retired. No Supabase calls exist today.
 
 ## State
-`localStorage.triproll_dna` = `{ dna, passport, archetype }`; `triproll_params` = last roll rules.
+- `localStorage.triproll_dna` is the v3 profile: `{ v: 3, axes: { pace, novelty, setting, comfort, social, structure, culture, activity }, archetype, brief }`. `brief` is the planner brief (climate, maxFlight, diet, dietAdventure, dietNotes, mobility, mobilityNotes, lodging, greats, greatsText, noGos, noGosText, visited, withWhom, occasion, notes). `parseProfile()` in `src/lib/storage.ts` validates it. Older shapes (six axes, v1 and v2) are discarded safely and the person retakes the assessment.
+- The full profile is serialized to JSON (`serializeProfile()` in `src/lib/profile.ts`) into the hidden `dna_profile` field on the trip-request and waitlist forms, with `archetype` beside it.
+- `triproll_params` is the last set of roll rules. The passport confirmation is never restored, so it is asked every time.
 
 ## Catalog fields added in v3
-`hours`, `climate`, `cold`, `city`, `remote` on each destination (see header of `src/data/destinations.ts`). They drive vetoes, flight band, climate hint and packing hints. They are approximate and hand-assigned.
+`hours`, `climate`, `cold`, `city`, `remote` on each destination (see header of `src/data/destinations.ts`). They drive vetoes, flight band, climate hint and packing hints. They are approximate and hand-assigned. `dna` holds eight hand-assigned axis scores (0 to 1).
+
+## Fixed-package flow (model B)
+- The site never picks, stores, transmits or reveals a destination before a request. `sealRules()` in `src/lib/request.ts` validates the rules and returns a sealed summary: dates, nights, travelers, package price per person and total, cabin, how many catalog entries stay in play, a general climate range, the rules honored and the DNA archetype. The header photo comes from vetoes and season only (`moodForRules`).
+- The catalog still ships in the client JS so the count can be computed. It is never rendered or posted. A unit test checks that the sealed summary and request payload carry no catalog name.
+- If fewer than `MIN_ELIGIBLE` (3) destinations fit, the person is asked to loosen a rule (same path as the below-floor case).
+- `rollTrip()` in `src/lib/dna.ts` is kept for tests only. Nothing in the UI imports it.
+- Card actions: Request this trip and Change my rules. The request form asks when to reveal: keep it sealed until the morning of departure (default), or reveal on a chosen date (picker limited to tomorrow through the day before departure). Payload fields: `delivery_preference`, `reveal_date`, `cabin`, `citizenship`, `passport_valid_six_months`, `destinations_in_play`, `archetype`, `dna_profile`.
+- Rules in `src/lib/pricing.config.ts`: `CABIN_FLOOR_MULT` (economy 1, premium economy 1.6, business 3.0) multiplies the per-person budget floor and the eligible set uses the economy-equivalent budget. `MAX_ORDER_TOTAL_USD = 10000`: per-person budget times travelers above that is not sealed; the person is told to reduce travelers or budget, or join the waitlist for larger trips (`roll:over-cap` source).
+
+## Entry rules (beta)
+- US passport holders only. The citizenship field routes "Other" to the waitlist with a friendly note. A required checkbox confirms the passport is valid for six months after the return date.
+- Each destination has `entry` (`domestic`, `none`, `on_arrival`, `prereg`), `entryVerified`, `advisoryLevel` and `vaccineRequired`. They come from a desk audit of official sources dated 2026-11-23 (source notes in `entry-audit.json`, kept outside the repo). The audit is a snapshot: a planner must re-verify entry rules, health requirements and the advisory before every booking. `entryVerified` is set to `2026-11-23` for every entry.
+- Exclusions during beta: `prereg` destinations (`BETA_ALLOW_PREREG = false`), any destination above `MAX_ADVISORY_LEVEL = 2`, and any that require a vaccination. With the current audit that removes the UK, South Korea, Australia and New Zealand (prereg) and Colombia and the UAE (advisory level 3). Mexico is `on_arrival` (FMM issued at the airport) and is Level 2 overall, though some Mexican states are Level 3 or 4, so the planner checks the region.
+- Public copy states the rule in general terms and names no country.
+
+## Travel DNA
+- Part 1: 24 scenario questions in 8 named sections, one per screen, scoring 8 axes (pace, novelty, setting, comfort, social, structure, culture and food depth, activity). Every axis is scored by at least 5 answers and both poles are reachable (tested). Part 2: a skippable planner brief.
+- Results show the archetype, an inline SVG radar, two strongest and two weakest axes, 5 or 6 "What this means for your trip" statements, a planner brief card, and a statement that a person reads the profile.
+- Matching logic and catalog scores are in `src/lib/dna.ts` and `src/data/quiz.ts`. Tests cover scoring, pole reachability, storage migration and serialization.
+
+## Payment wording
+`paymentsLive` in `src/lib/pricing.config.ts` is `false`. All payment wording comes from `src/data/payment.ts`, which has two variants. The "on" variant (card hold) exists for later; do not enable it until a card-hold flow exists. A test fails if hold wording appears anywhere while the flag is false.
 
 ## Open items
 - Owner review of `/privacy` and `/terms` (marked DRAFT). A privacy contact email is not published because none was supplied.
 - No phone, address or email in `site.config.ts`; JSON-LD type is `TravelAgency` with only name, url and logo.
 - Costs assume a major US hub regardless of the departure airport entered.
-- Entry and visa rules are not shown; copy says a person checks them at quote time.
+- Entry rules in the catalog are a dated desk audit, not legal advice. A planner re-verifies them before every booking.
 - Seller-of-travel registration and the CA/FL/HI/IA/WA restriction are taken from the brief; confirm legal position.
 - Confirm the Netlify forms in the dashboard after the first deploy.
 
@@ -37,23 +61,22 @@ All constants live in `src/lib/pricing.config.ts`. Tests read them from there.
 - The customer states a per-person budget. The trip is sold as one package price: the stated budget rounded down to the nearest 10 dollars, shown per person and in total, labeled an estimate until a person confirms.
 - Eligibility: a destination can be rolled only if its internal cost per person (flights plus stay plus a 12 percent transfers and experiences allowance, with the seasonal multiplier at its maximum, 1.14) is at or below 75 percent of the budget. The internal cost is computed in `internalCostPP()` and is never attached to a `Trip`. `Trip.price` is exactly `{ perPerson, total }` and `Trip.dest` has no `flightBase` or `hotelNight`.
 - Viability floor (`minBudgetPP()`): the cost of the cheapest eligible destination for the entered nights, party and passport divided by 0.75 and rounded up to 10, or 150 per person per night, or 600 per person, whichever is highest. Below the floor the island does not roll; it shows one message ("This trip length needs at least X per person...") and the slider minimum follows the floor. There is no "almost there" messaging.
-- Copy (home, how it works, FAQ, roll, terms, footer): beta orders are reviewed by a person within 72 hours before any card is charged; if the trip cannot be built inside the rules the customer owes nothing and can roll again free; confirmed customers get the confirmation and packing list, and tickets and the full itinerary arrive the morning of departure (or sooner if they chose to reveal). There is no payment step; payment is collected only at confirmation. The 4-step timeline lives in `TIMELINE` in `src/data/roll.ts`.
+- Copy (home, how it works, FAQ, roll, terms, footer): beta orders are reviewed by a person within 72 hours before any card is charged; if the trip cannot be built inside the rules the customer owes nothing and can roll again free; confirmed customers get the confirmation and packing list, and the full itinerary arrives the morning of departure, or on the reveal date the customer picked. There is no payment step; payment is collected only at confirmation. The 4-step timeline lives in `TIMELINE` in `src/data/roll.ts`.
 
 ## Photography
 Originals are in `src/assets/photos/`, rendered by `src/components/Photo.astro` (AVIF and WebP, responsive widths, lazy below the fold). Alt text and the climate-to-mood rule for the itinerary card header are in `src/data/photos.ts`. The header photo is chosen from climate flags only (`moodFor`), never from a destination id. `src/assets/photos/CREDITS.md` lists every file with its Unsplash URL. Photographer names and licenses are NOT confirmed: the owner must confirm licensing before launch. No photo of a passport flat-lay or a street-food scene shipped (no clean candidate passed review).
 
 ## Globe
-- `src/lib/earth.ts` is a three.js scene (NASA Blue Marble day map, topology bump map, ocean specular mask, fresnel atmosphere, pin and label). It is only reached by dynamic import from `src/components/islands/Globe.tsx`.
-- Textures: `public/globe/earth-day-4096.webp` (desktop, 438 KB), `earth-day-2048.webp` (under 900 px wide, 172 KB), `earth-bump-2048.webp` and `earth-bump-1024.webp`. Rebuild with `npm run textures` (inputs in /tmp, see the script header).
-- Poster: `src/assets/globe-poster.webp` is a transparent frame of the same scene, rendered with `npm run poster` (system Chrome via puppeteer-core). The hero and the roll sidebar paint the poster first; the WebGL canvas fades in on top. Hero loads WebGL on idle at 900 px and wider, on first interaction on small screens, and never under reduced motion or without WebGL. The roll globe loads when visible and renders single frames under reduced motion.
-- Behavior: slow idle spin; fast spin and pull back while rolling; sealed rolls never point at the destination; reveal flies in to the destination with a pin and label; a new roll zooms back out. Drag to rotate, pinch or +/- buttons to zoom, Ctrl or Cmd with the wheel zooms (plain wheel scrolls the page). Rendering pauses when the canvas is offscreen or the tab is hidden; devicePixelRatio is capped at 2; geometries, materials, textures and the renderer are disposed on unmount.
-- Regenerate the favicon set with `npm run brand` and the og image with `npm run og` (needs the poster).
+- `src/lib/globe3d.ts` is a small three.js scene: deep teal ocean, flat lighter land from a generated mask texture, a faint graticule, soft diffuse shading, a subtle same-hue rim, one orbit swoosh and an amber pin that travels it. It is only reached by dynamic import from `src/components/islands/Globe.tsx`.
+- The land mask is generated by `npm run textures` from `world-atlas` (land-50m) and `topojson-client` (dev dependencies). There are no photo textures. The poster (`src/assets/globe-poster.webp`) is rendered from the same scene with `npm run poster` (system Chrome via puppeteer-core).
+- Home hero: same placement as before, poster first. Phones get the poster only; desktop loads the canvas on idle. Never under reduced motion or without WebGL.
+- Roll page: the globe is a short transition (full-width stage, spin-up and pin whip, about 2.1 s, instant under reduced motion). Afterwards it stays as a small calm draggable globe beside or above the card. No zoom buttons, no rings, and the pin never lands on a location.
+- Behavior: slow idle rotation, drag to rotate, rendering pauses offscreen or when the tab is hidden, devicePixelRatio capped at 2, resources disposed on unmount.
+- Brand assets: `npm run logo` derives the web logos from the official artwork (`scripts/make-logo.mjs`). The footer uses a recolored copy of the official light logo (alpha kept) as WebP and PNG at 1x and 2x. The header uses the official primary artwork. Nothing is redrawn. `npm run brand` regenerates the favicon set and `npm run og` the og image. Teal is #00a99d and amber #fbb03b; text and link colors use a darker teal (#007a72) to keep AA contrast.
 
-## Local gate results (mobile Lighthouse on `astro preview`, headless Chrome, simulated throttling)
-- `/`: performance 0.95 to 0.99 across runs, accessibility 0.98, best practices 1, SEO 1. The hero poster is the LCP element (about 2.2 to 2.4 s), so keep the poster small and the globe island on `client:idle`.
-- `/how-it-works`: 0.96 / 0.98 / 1 / 1.
-- `/roll` (not gated): performance 0.55 because headless Chrome rasterizes WebGL in software (SwiftShader), which blocks the main thread. The globe drops to 1x and 2048 textures on software renderers. Real GPUs are not affected. Check on a real phone before launch.
-- First-load transfer (Chrome, 4 s idle): `/` 805 KB desktop (includes the 4096 day texture) and 283 KB mobile; `/roll` 544 KB desktop and 521 KB mobile.
+## Local gate results (Lighthouse 9.6.8, headless Chrome, round 3)
+- CPU slowdown 8x, three runs each: `/` performance 0.98, 0.98, 0.99 (LCP 2.1 to 2.4 s, blocking time 0); `/how-it-works` 1.00, 0.99, 1.00. At default settings: `/` accessibility 0.95, best practices 1, SEO 1; `/how-it-works` accessibility 0.98, best practices 1, SEO 1.
+- `/roll` is not gated. Headless Chrome rasterizes WebGL in software, which blocks the main thread; real GPUs are not affected. Check on a real phone before launch.
 - Scores vary by a few points between runs; the Netlify plugin thresholds in `netlify.toml` are unchanged.
 
 ## Performance notes (Lighthouse 9 mobile, the version the Netlify plugin runs)

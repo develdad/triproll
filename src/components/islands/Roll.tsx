@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
-import { AIRPORTS, RESTRICTED_STATES, US_STATES, VETOES, ui } from '../../data/roll.ts';
-import { MIN_LEAD_DAYS, fmt, minBudgetPP, rollTrip, type Flexibility, type Passport, type Trip, type Veto } from '../../lib/dna.ts';
+import { AIRPORTS, CABINS, DELIVERY_OPTIONS, ENTRY_RULE, RESTRICTED_STATES, US_STATES, VETOES, ui } from '../../data/roll.ts';
+import { MIN_LEAD_DAYS, fmt, fmtDate, minBudgetPP, type Cabin, type Citizenship, type Flexibility, type Passport, type Veto } from '../../lib/dna.ts';
 import { BUDGET_MAX } from '../../lib/pricing.config.ts';
-import { moodFor, type Mood } from '../../data/photos.ts';
-import { loadDna, loadParams, saveParams, type StoredDna, type StoredParams } from '../../lib/storage.ts';
-import { emitGlobe } from '../../lib/globeBus.ts';
+import { pay } from '../../data/payment.ts';
+import type { Mood } from '../../data/photos.ts';
+import { loadParams, loadProfile, saveParams, type StoredProfile } from '../../lib/storage.ts';
+import { archetypeOf, serializeProfile } from '../../lib/profile.ts';
+import { buildRequestPayload, moodForRules, overCap as isOverCap, sealRules, type Delivery, type Rules, type Sealed } from '../../lib/request.ts';
 import { submitLead } from '../../lib/leads.ts';
 import ItineraryCard, { makeRef, type MoodImage } from './ItineraryCard.tsx';
 import Timeline from './Timeline.tsx';
+import Globe from './Globe.tsx';
 
-type Phase = 'params' | 'rolling' | 'result' | 'request' | 'sent';
-const MAX_REROLLS = 3;
-const ROLL_MS = 1600;
+type WaitlistWhy = 'other' | 'cap';
+type Phase = 'params' | 'stage' | 'result' | 'request' | 'sent' | 'waitlist';
+export const STAGE_MS = 2100;
 
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const addDays = (iso: string, n: number) => new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
@@ -27,19 +30,20 @@ function monthOptions(): { value: string; label: string }[] {
   return out;
 }
 
-const DEFAULTS: StoredParams = {
+const DEFAULTS: Rules = {
   airport: '', party: 2, budget: 1500, nights: 5, flexibility: 'exact', earliest: '', month: '',
-  passport: 'valid', vetoes: [], reveal: 'surprise',
+  citizenship: 'us', passport: 'valid', passportSixMonths: false, vetoes: [], cabin: 'economy', delivery: 'sealed', revealDate: '',
 };
+type Poster = { src: string; width: number; height: number };
 
-export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
-  const [params, setParams] = useState<StoredParams>(DEFAULTS);
-  const [dna, setDna] = useState<StoredDna | null>(null);
+export default function Roll({ moods, poster }: { moods: Record<Mood, MoodImage>; poster: Poster }) {
+  const [params, setParams] = useState<Rules>(DEFAULTS);
+  const [profile, setProfile] = useState<StoredProfile | null>(null);
   const [months, setMonths] = useState<{ value: string; label: string }[]>([]);
   const [today, setToday] = useState('');
   const [phase, setPhase] = useState<Phase>('params');
-  const [rolls, setRolls] = useState<Trip[]>([]);
-  const [revealed, setRevealed] = useState(false);
+  const [sealed, setSealed] = useState<Sealed | null>(null);
+  const [mood, setMood] = useState<Mood>('wing');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const [announce, setAnnounce] = useState('');
@@ -48,141 +52,130 @@ export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const stepHead = useRef<HTMLHeadingElement>(null);
 
-  // request form
-  const [form, setForm] = useState({ name: '', email: '', state: '', dietary: '', notes: '', trap: '' });
+  const [form, setForm] = useState({ name: '', email: '', state: '', notes: '', trap: '' });
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [waitWhy, setWaitWhy] = useState<WaitlistWhy>('other');
   const [sentKind, setSentKind] = useState<'trip' | 'waitlist'>('trip');
 
-  const rerollsUsed = Math.max(0, rolls.length - 1);
-  const trip = rolls[rolls.length - 1];
   const restricted = (RESTRICTED_STATES as readonly string[]).includes(form.state);
-  const floor = useMemo(() => minBudgetPP(params.nights, params.party, params.passport), [params.nights, params.party, params.passport]);
-  const belowFloor = hydrated && params.budget < floor;
+  const floor = useMemo(() => Math.min(BUDGET_MAX, minBudgetPP(params.nights, params.party, params.passport, params.vetoes, params.cabin)), [params.nights, params.party, params.passport, params.vetoes, params.cabin]);
+  const overCap = hydrated && params.citizenship === 'us' && isOverCap(params.budget, params.party);
+  const belowFloor = hydrated && params.citizenship === 'us' && params.budget < floor;
   const minDate = useMemo(() => (today ? addDays(today, MIN_LEAD_DAYS) : ''), [today]);
+  const arch = profile ? archetypeOf(profile) : null;
 
   useEffect(() => {
     const t = isoToday();
     setToday(t);
     setMonths(monthOptions());
     const saved = loadParams() ?? {};
-    const d = loadDna();
-    setDna(d);
-    const earliestDefault = addDays(t, 30);
-    const merged: StoredParams = { ...DEFAULTS, ...saved } as StoredParams;
-    if (!merged.earliest || merged.earliest < addDays(t, MIN_LEAD_DAYS)) merged.earliest = earliestDefault;
-    if (!saved.passport && d) merged.passport = d.passport;
+    setProfile(loadProfile());
+    const merged = { ...DEFAULTS, ...saved } as Rules;
+    if (!merged.earliest || merged.earliest < addDays(t, MIN_LEAD_DAYS)) merged.earliest = addDays(t, 30);
     if (!merged.month) merged.month = monthOptions()[1].value;
+    merged.passportSixMonths = false; // always re-confirm
+    merged.delivery = merged.delivery === 'date' ? 'date' : 'sealed';
+    merged.cabin = (['economy', 'premium', 'business'] as const).includes(merged.cabin as Cabin) ? merged.cabin : 'economy';
+    merged.revealDate = typeof merged.revealDate === 'string' ? merged.revealDate : '';
     setParams(merged);
     setHydrated(true);
     return () => clearTimeout(timer.current);
   }, []);
   useEffect(() => { if (hydrated) saveParams(params); }, [params, hydrated]);
-  useEffect(() => { if (phase !== 'params') stepHead.current?.focus(); }, [phase]);
+  const firstPhase = useRef(true);
+  useEffect(() => {
+    if (firstPhase.current) { firstPhase.current = false; return; }
+    // Bring the new step into view: the page shortens when the form is replaced, so the old scroll position would land past it.
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelector('.stepper')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    if (phase !== 'params' && phase !== 'stage') stepHead.current?.focus({ preventScroll: true });
+  }, [phase]);
 
-  const set = <K extends keyof StoredParams>(k: K, v: StoredParams[K]) => setParams((p) => ({ ...p, [k]: v }));
+  const set = <K extends keyof Rules>(k: K, v: Rules[K]) => setParams((p) => ({ ...p, [k]: v }));
   const toggleVeto = (v: Veto) => set('vetoes', params.vetoes.includes(v) ? params.vetoes.filter((x) => x !== v) : [...params.vetoes, v]);
 
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (params.airport.trim().length < 3) e.airport = 'Enter your departure airport, for example PHX.';
-    if (params.budget < floor) e.budget = ui.belowFloor(fmt(floor));
+    if (params.citizenship === 'us') {
+      if (params.budget < floor) e.budget = ui.belowFloor(fmt(floor));
+      if (params.passport === 'valid' && !params.passportSixMonths) e.passport = 'Confirm your passport is valid for six months after your return date.';
+    }
     if (params.flexibility === 'month') { if (!params.month) e.date = 'Choose a month.'; }
     else if (!params.earliest || params.earliest < minDate) e.date = `Choose a date at least ${MIN_LEAD_DAYS} days from today.`;
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  function runRoll(exclude: string[], fresh: boolean) {
-    const res = rollTrip({
-      dna: dna?.dna ?? null, passport: params.passport, party: params.party, budgetPP: params.budget, nights: params.nights,
-      flexibility: params.flexibility, earliest: params.earliest, month: params.month, vetoes: params.vetoes, exclude,
-    });
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const wait = reduced ? 0 : ROLL_MS;
-    setMessage('');
-    if (!res.ok) {
-      const msg = res.reason === 'below-floor' ? ui.belowFloor(fmt(res.minBudget ?? floor)) : res.reason === 'exhausted' ? ui.exhausted : ui.noMatch;
-      if (fresh) { setPhase('params'); setMessage(msg); } else setMessage(msg);
-      emitGlobe({ mode: 'idle' });
-      return;
-    }
-    setPhase('rolling');
-    setAnnounce(ui.rolling);
-    if (window.matchMedia('(max-width: 61.99rem)').matches) document.querySelector('.roll-side')?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
-    emitGlobe({ mode: 'spin' });
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      const t = res.trip;
-      setRolls((r) => (fresh ? [t] : [...r, t]));
-      setRef(makeRef());
-      const show = params.reveal === 'now';
-      setRevealed(show);
-      setPhase('result');
-      setAnnounce(show ? `Trip rolled. Destination: ${t.dest.name}, ${t.dest.country}.` : 'Trip rolled. Destination sealed.');
-      if (show) emitGlobe({ mode: 'focus', lat: t.dest.lat, lng: t.dest.lng, label: `${t.dest.name}, ${t.dest.country}` });
-      else emitGlobe({ mode: 'idle' });
-    }, wait);
-  }
-
-  function onRoll(e: SyntheticEvent) {
+  function onSeal(e: SyntheticEvent) {
     e.preventDefault();
+    setMessage('');
     if (!validate()) return;
-    setRolls([]);
-    runRoll([], true);
-  }
-  function onReroll() {
-    if (rerollsUsed >= MAX_REROLLS) return;
-    runRoll(rolls.map((r) => r.dest.id), false);
-  }
-  function onReveal() {
-    if (!trip) return;
-    setRevealed(true);
-    setAnnounce(`Destination revealed: ${trip.dest.name}, ${trip.dest.country}.`);
-    if (window.matchMedia('(max-width: 61.99rem)').matches) document.querySelector('.roll-side')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
-    emitGlobe({ mode: 'focus', lat: trip.dest.lat, lng: trip.dest.lng, label: `${trip.dest.name}, ${trip.dest.country}` });
+    if (params.citizenship === 'us' && isOverCap(params.budget, params.party)) { setMessage(ui.overCap); return; }
+    if (params.citizenship === 'other') { setWaitWhy('other'); setPhase('waitlist'); return; }
+    const res = sealRules(params);
+    if (!res.ok) { setMessage(res.reason === 'too-few' ? ui.tooFew : ui.belowFloor(fmt(res.minBudget ?? floor))); return; }
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setSealed(res.sealed);
+    setMood(moodForRules(params.vetoes, res.sealed.start));
+    setRef(makeRef());
+    setAnnounce(ui.sealing);
+    if (reduced) { setPhase('result'); setAnnounce('Rules sealed. Your card is ready.'); return; }
+    setPhase('stage');
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => { setPhase('result'); setAnnounce('Rules sealed. Your card is ready.'); }, STAGE_MS);
   }
   function editRules() {
+    clearTimeout(timer.current);
     setPhase('params');
-    setRolls([]);
-    setRevealed(false);
+    setSealed(null);
     setMessage('');
-    emitGlobe({ mode: 'idle' });
   }
+
+  const dnaForm = profile ? { archetype: profile.archetype, profileJson: serializeProfile(profile) } : null;
 
   async function onSubmit(e: SyntheticEvent) {
     e.preventDefault();
     setSendError('');
-    if (!form.name.trim() || !/^\S+@\S+\.\S+$/.test(form.email) || !form.state) {
-      setSendError('Add your name, a valid email and your state.');
-      return;
+    if (!sealed) return;
+    if (!form.name.trim() || !/^\S+@\S+\.\S+$/.test(form.email) || !form.state) { setSendError('Add your name, a valid email and your state.'); return; }
+    if (!restricted && params.delivery === 'date') {
+      const last = sealed.start ? addDays(sealed.start, -1) : '';
+      if (!params.revealDate || params.revealDate <= today || params.revealDate > last) { setSendError(`Pick a reveal date between tomorrow and ${fmtDate(last)}, before you leave.`); return; }
     }
     setSending(true);
     let r;
     if (restricted) {
       r = await submitLead('waitlist', {
-        name: form.name, email: form.email, state: form.state, source: 'roll:restricted-state', archetype: dna?.archetype ?? '',
-        note: `Rolled: ${params.party} traveler(s), ${params.nights} nights, budget ${params.budget} per person. ${form.notes}`.trim(),
-        'bot-field': form.trap,
+        name: form.name, email: form.email, state: form.state, source: 'roll:restricted-state', citizenship: 'US passport',
+        archetype: dnaForm?.archetype ?? '', dna_profile: dnaForm?.profileJson ?? '',
+        note: `${params.party} traveler(s), ${params.nights} nights, budget ${params.budget} per person. ${form.notes}`.trim(), 'bot-field': form.trap,
       });
       if (r.ok) setSentKind('waitlist');
     } else {
-      r = await submitLead('trip-request', {
-        name: form.name, email: form.email, state: form.state, notes: form.notes, dietary: form.dietary,
-        departure_airport: params.airport, travelers: params.party, budget_per_person: params.budget, nights: params.nights,
-        flexibility: params.flexibility, earliest_departure: params.flexibility === 'month' ? '' : params.earliest,
-        month: params.flexibility === 'month' ? params.month : '', passport: params.passport, vetoes: params.vetoes,
-        reveal_preference: params.reveal === 'now' ? 'show me now' : 'surprise me until departure day', revealed_in_app: revealed ? 'yes' : 'no',
-        destination_id: trip.dest.id, trip_start: trip.start, trip_end: trip.end, estimated_total: trip.price.total,
-        estimated_per_person: trip.price.perPerson, rerolls_used: rerollsUsed, archetype: dna?.archetype ?? '', 'bot-field': form.trap,
-      });
+      r = await submitLead('trip-request', { ...buildRequestPayload(params, sealed, { name: form.name, email: form.email, state: form.state, notes: form.notes }, dnaForm), 'bot-field': form.trap });
       if (r.ok) setSentKind('trip');
     }
     setSending(false);
-    if (r.ok) { setPhase('sent'); emitGlobe({ mode: 'idle' }); } else setSendError(ui.submitError);
+    if (r.ok) setPhase('sent'); else setSendError(ui.submitError);
+  }
+  async function onWaitlistOther(e: SyntheticEvent) {
+    e.preventDefault();
+    setSendError('');
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) { setSendError('Add a valid email.'); return; }
+    setSending(true);
+    const r = await submitLead('waitlist', {
+      name: form.name, email: form.email, state: form.state, source: waitWhy === 'cap' ? 'roll:over-cap' : 'roll:non-us-passport', citizenship: waitWhy === 'cap' ? 'US passport' : 'Other',
+      archetype: dnaForm?.archetype ?? '', dna_profile: dnaForm?.profileJson ?? '', note: form.notes, 'bot-field': form.trap,
+    });
+    setSending(false);
+    if (r.ok) { setSentKind('waitlist'); setPhase('sent'); } else setSendError(ui.submitError);
   }
 
-  const stepIndex = phase === 'params' ? 0 : phase === 'rolling' || phase === 'result' ? 1 : 2;
+  const stepIndex = phase === 'params' || phase === 'waitlist' ? 0 : phase === 'stage' || phase === 'result' ? 1 : 2;
+  const inFlow = (phase === 'stage' || phase === 'result' || phase === 'request') && sealed;
+  const globeMode = phase === 'stage' ? 'whip' : 'idle';
 
   return (
     <div>
@@ -194,9 +187,10 @@ export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
       <div className="sr-only" role="status" aria-live="polite">{announce}</div>
 
       {phase === 'params' && (
-        <form onSubmit={onRoll} noValidate>
+        <form onSubmit={onSeal} noValidate>
           <h2 className="panel-title">{ui.paramsTitle}</h2>
-          <p style={{ marginBottom: '1.5rem' }}>{ui.paramsIntro}</p>
+          <p style={{ marginBottom: '0.5rem' }}>{ui.paramsIntro}</p>
+          <p className="hint" style={{ marginBottom: '1.5rem' }}>{ENTRY_RULE}</p>
 
           <div className="field">
             <label htmlFor="airport">Departure airport</label>
@@ -217,7 +211,7 @@ export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
           </div>
 
           <div className="field">
-            <label htmlFor="budget">Budget per person <span className="hint">USD, one package price for the whole trip</span></label>
+            <label htmlFor="budget">Budget per person <span className="hint">USD. This is your package price.</span></label>
             <div className="range-row">
               <input id="budget" type="range" min={floor} max={BUDGET_MAX} step={10} value={Math.min(BUDGET_MAX, Math.max(floor, params.budget))} onChange={(e) => set('budget', Number(e.target.value))} aria-valuetext={`$${params.budget}`} />
               <input id="budget-n" aria-label="Budget per person in dollars" type="number" inputMode="numeric" min={floor} max={BUDGET_MAX} step={10} value={params.budget || ''} onChange={(e) => set('budget', clamp(Math.round(Number(e.target.value)), 0, BUDGET_MAX))} aria-invalid={belowFloor || !!errors.budget} aria-describedby="budget-note" />
@@ -226,6 +220,18 @@ export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
               {belowFloor ? ui.belowFloor(fmt(floor)) : `Minimum for ${params.nights} nights and ${params.party} ${params.party === 1 ? 'traveler' : 'travelers'}: ${fmt(floor)} per person.`}
             </p>
           </div>
+
+          {params.citizenship === 'us' && (
+            <fieldset>
+              <legend>Cabin</legend>
+              <div className="seg cols3">
+                {CABINS.map((c) => (
+                  <label className="opt" key={c.id}><input type="radio" name="cabin" checked={params.cabin === c.id} onChange={() => set('cabin', c.id as Cabin)} /><span>{c.label}</span></label>
+                ))}
+              </div>
+              <p className="hint" style={{ marginTop: '0.5rem' }}>Higher cabins raise the minimum budget.</p>
+            </fieldset>
+          )}
 
           <fieldset>
             <legend>Dates</legend>
@@ -245,102 +251,155 @@ export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
               <div className="field">
                 <label htmlFor="earliest">{params.flexibility === 'exact' ? 'Departure date' : 'Departure date, give or take 3 days'}</label>
                 <input id="earliest" type="date" min={minDate || undefined} value={params.earliest} onChange={(e) => set('earliest', e.target.value)} />
-                <span className="hint">At least {MIN_LEAD_DAYS} days from today, so a person has time to price it.</span>
+                <span className="hint">At least {MIN_LEAD_DAYS} days from today, so a person has time to build it.</span>
               </div>
             )}
             {errors.date && <p className="error">{errors.date}</p>}
           </fieldset>
 
           <fieldset>
-            <legend>Passport</legend>
+            <legend>Citizenship</legend>
             <div className="seg cols2">
-              {([['valid', 'Valid passport'], ['none', 'None, or expired']] as [Passport, string][]).map(([v, l]) => (
-                <label className="opt" key={v}><input type="radio" name="passport" checked={params.passport === v} onChange={() => set('passport', v)} /><span>{l}</span></label>
+              {([['us', 'US passport'], ['other', 'Other']] as [Citizenship, string][]).map(([v, l]) => (
+                <label className="opt" key={v}><input type="radio" name="citizenship" checked={params.citizenship === v} onChange={() => set('citizenship', v)} /><span>{l}</span></label>
               ))}
             </div>
-            {params.passport === 'none' && <p className="hint" style={{ marginTop: '0.5rem' }}>Domestic destinations only.</p>}
+            {params.citizenship === 'other' && <p className="notice" role="status" style={{ marginTop: '0.75rem' }}>{ui.otherCitizen}</p>}
           </fieldset>
 
-          <fieldset>
-            <legend>Vetoes <span className="hint">optional, hard rules</span></legend>
-            <div className="chips">
-              {VETOES.map((v) => (
-                <label className="chip" key={v.id}><input type="checkbox" checked={params.vetoes.includes(v.id)} onChange={() => toggleVeto(v.id)} /><span>{v.label}</span></label>
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend>Reveal</legend>
-            <div className="seg cols2">
-              {([['surprise', 'Surprise me until departure day'], ['now', 'Show me now']] as ['surprise' | 'now', string][]).map(([v, l]) => (
-                <label className="opt" key={v}><input type="radio" name="reveal" checked={params.reveal === v} onChange={() => set('reveal', v)} /><span>{l}</span></label>
-              ))}
-            </div>
-          </fieldset>
-
-          {message && <p className="notice warn" role="alert">{message}</p>}
-          {!dna && <p className="hint">No Travel DNA yet. <a href="/travel-dna">Take the quiz</a> to tilt rolls toward your taste, or roll without it.</p>}
-          <div className="controls"><button type="submit" className="btn">{ui.rollButton}</button></div>
-        </form>
-      )}
-
-      {phase === 'rolling' && (
-        <div>
-          <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>Rolling</h2>
-          <p>{ui.rolling}</p>
-          <div className="rolling-bar" aria-hidden="true"><i /></div>
-        </div>
-      )}
-
-      {(phase === 'result' || phase === 'request') && trip && (
-        <div>
-          <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>{phase === 'result' ? 'Your roll' : 'Request this trip'}</h2>
-          <ItineraryCard trip={trip} airport={params.airport} revealed={revealed} dna={dna?.dna ?? null} mood={moods[moodFor(trip.dest)]} refCode={ref} />
-          <p className="fine">{ui.estimateNote}</p>
-          {message && <p className="notice warn" role="alert" style={{ marginTop: '1rem' }}>{message}</p>}
-
-          {phase === 'result' && (
+          {params.citizenship === 'us' && (
             <>
-              <div className="controls">
-                <button type="button" className="btn" onClick={() => { setPhase('request'); setMessage(''); }}>Request this trip</button>
-                <button type="button" className="btn ghost" onClick={onReroll} disabled={rerollsUsed >= MAX_REROLLS}>Reroll ({MAX_REROLLS - rerollsUsed} left)</button>
-                <button type="button" className="btn ghost" onClick={onReveal} disabled={revealed}>{revealed ? 'Revealed' : 'Reveal destination'}</button>
-                <button type="button" className="linkish" onClick={editRules}>Edit rules</button>
-              </div>
-              {!revealed && <p className="hint" style={{ marginTop: '0.75rem' }}>{ui.revealNote}</p>}
-              {rerollsUsed >= MAX_REROLLS && <p className="notice" style={{ marginTop: '1rem' }}>{ui.rerollLimit}</p>}
+              <fieldset>
+                <legend>Passport</legend>
+                <div className="seg cols2">
+                  {([['valid', 'Valid passport'], ['none', 'None, or expired']] as [Passport, string][]).map(([v, l]) => (
+                    <label className="opt" key={v}><input type="radio" name="passport" checked={params.passport === v} onChange={() => set('passport', v)} /><span>{l}</span></label>
+                  ))}
+                </div>
+                {params.passport === 'none' && <p className="hint" style={{ marginTop: '0.5rem' }}>Domestic places only.</p>}
+                {params.passport === 'valid' && (
+                  <label className="check" style={{ marginTop: '0.75rem' }}>
+                    <input type="checkbox" checked={params.passportSixMonths} onChange={(e) => set('passportSixMonths', e.target.checked)} aria-describedby={errors.passport ? 'err-passport' : undefined} aria-invalid={!!errors.passport} />
+                    <span>{ui.passportLabel}</span>
+                  </label>
+                )}
+                {errors.passport && <p className="error" id="err-passport">{errors.passport}</p>}
+              </fieldset>
+
+              <fieldset>
+                <legend>Vetoes <span className="hint">optional, hard rules</span></legend>
+                <div className="chips">
+                  {VETOES.map((v) => (
+                    <label className="chip" key={v.id}><input type="checkbox" checked={params.vetoes.includes(v.id)} onChange={() => toggleVeto(v.id)} /><span>{v.label}</span></label>
+                  ))}
+                </div>
+              </fieldset>
             </>
           )}
 
-          {phase === 'request' && (
-            <form onSubmit={onSubmit} className="request-form" noValidate>
-              <h3 className="form-title">Send your request</h3>
-              <Timeline active={0} />
-              <div className="grid2">
-                <div className="field"><label htmlFor="r-name">Name</label><input id="r-name" type="text" autoComplete="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                <div className="field"><label htmlFor="r-email">Email</label><input id="r-email" type="email" autoComplete="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-              </div>
-              <div className="field">
-                <label htmlFor="r-state">State of residence</label>
-                <select id="r-state" required value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
-                  <option value="">Choose a state</option>
-                  {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
-                </select>
-              </div>
-              {restricted && <p className="notice warn" role="status">{ui.restrictedNote}</p>}
-              {!restricted && (
-                <div className="field"><label htmlFor="r-diet">Dietary needs <span className="hint">optional</span></label><input id="r-diet" type="text" value={form.dietary} onChange={(e) => setForm({ ...form, dietary: e.target.value })} /></div>
+          {(message || overCap) && (
+            <p className="notice warn" role="alert">
+              {message || ui.overCap}
+              {(message === ui.overCap || (!message && overCap)) && <> <button type="button" className="linklike" onClick={() => { setWaitWhy('cap'); setPhase('waitlist'); }}>Join the waitlist</button></>}
+            </p>
+          )}
+          {!profile && <p className="hint">No Travel DNA yet. <a href="/travel-dna">Take the assessment</a> so your planner knows how you like to travel.</p>}
+          <div className="controls"><button type="submit" className="btn">{params.citizenship === 'other' ? 'Join the waitlist' : ui.sealButton}</button></div>
+        </form>
+      )}
+
+      {phase === 'waitlist' && (
+        <form onSubmit={onWaitlistOther} noValidate>
+          <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>Join the waitlist</h2>
+          <p className="lead">{waitWhy === 'cap' ? ui.overCap : ui.otherCitizen}</p>
+          <div className="grid2" style={{ marginTop: '1.25rem' }}>
+            <div className="field"><label htmlFor="w-name">Name <span className="hint">optional</span></label><input id="w-name" type="text" autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="field"><label htmlFor="w-email">Email</label><input id="w-email" type="email" autoComplete="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+          </div>
+          <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden="true" name="bot-field" value={form.trap} onChange={(e) => setForm({ ...form, trap: e.target.value })} />
+          {sendError && <p className="error" role="alert">{sendError}</p>}
+          <div className="controls">
+            <button type="submit" className="btn" disabled={sending}>{sending ? 'Sending' : 'Join the waitlist'}</button>
+            <button type="button" className="btn ghost" onClick={editRules}>Change my rules</button>
+          </div>
+        </form>
+      )}
+
+      {inFlow && sealed && (
+        <div className={`roll-flow ${phase === 'stage' ? 'is-stage' : 'is-result'}`}>
+          <div className="roll-globe">
+            <div className="globe-stage">
+              <div className="poster"><img src={poster.src} width={poster.width} height={poster.height} alt="" role="presentation" decoding="async" /></div>
+              <Globe variant={phase === 'stage' ? 'stage' : 'side'} mode={globeMode} />
+            </div>
+            {phase === 'stage' && <p className="stage-cap" aria-hidden="true">Sealing your rules</p>}
+          </div>
+          {phase !== 'stage' && (
+            <div className="roll-card">
+              <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>{phase === 'result' ? 'Your sealed card' : 'Request this trip'}</h2>
+              <ItineraryCard sealed={sealed} airport={params.airport} archetypeName={arch?.name ?? null} mood={moods[mood]} refCode={ref} passport={params.passport} />
+              <p className="fine">{ui.estimateNote}</p>
+              <p className="fine" style={{ marginTop: '0.35rem' }}>{ui.sealedNote}</p>
+
+              {phase === 'result' && (
+                <div className="controls">
+                  <button type="button" className="btn" onClick={() => setPhase('request')}>Request this trip</button>
+                  <button type="button" className="btn ghost" onClick={editRules}>Change my rules</button>
+                </div>
               )}
-              <div className="field"><label htmlFor="r-notes">Notes <span className="hint">optional</span></label><textarea id="r-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
-              <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden="true" name="bot-field" value={form.trap} onChange={(e) => setForm({ ...form, trap: e.target.value })} />
-              {sendError && <p className="error" role="alert">{sendError}</p>}
-              <div className="controls">
-                <button type="submit" className="btn" disabled={sending}>{sending ? 'Sending' : restricted ? 'Join the waitlist' : 'Send trip request'}</button>
-                <button type="button" className="btn ghost" onClick={() => setPhase('result')}>Back to roll</button>
-              </div>
-              {!restricted && <p className="hint" style={{ marginTop: '0.75rem' }}>{ui.requestNote}</p>}
-            </form>
+
+              {phase === 'request' && (
+                <form onSubmit={onSubmit} className="request-form" noValidate>
+                  <h3 className="form-title">Send your request</h3>
+                  <Timeline active={0} />
+                  <div className="grid2">
+                    <div className="field"><label htmlFor="r-name">Name</label><input id="r-name" type="text" autoComplete="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                    <div className="field"><label htmlFor="r-email">Email</label><input id="r-email" type="email" autoComplete="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="r-state">State of residence</label>
+                    <select id="r-state" required value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}>
+                      <option value="">Choose a state</option>
+                      {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  {restricted && <p className="notice warn" role="status">{ui.restrictedNote}</p>}
+                  {!restricted && (
+                    <fieldset>
+                      <legend>When should we tell you where you are going?</legend>
+                      <div className="seg cols2">
+                        {DELIVERY_OPTIONS.map((o) => (
+                          <label className="opt" key={o.id}><input type="radio" name="delivery" checked={params.delivery === o.id} onChange={() => set('delivery', o.id as Delivery)} /><span>{o.label}</span></label>
+                        ))}
+                      </div>
+                      {params.delivery === 'date' && (
+                        <div className="field" style={{ marginTop: '0.75rem' }}>
+                          <label htmlFor="r-reveal">Reveal date</label>
+                          <input id="r-reveal" type="date" min={addDays(today, 1)} max={addDays(sealed.start, -1)} value={params.revealDate} onChange={(e) => set('revealDate', e.target.value)} aria-describedby="reveal-help" />
+                          <span className="hint" id="reveal-help">{ui.revealHelp}</span>
+                        </div>
+                      )}
+                      <p className="hint" style={{ marginTop: '0.5rem' }}>Both happen only after we confirm the trip.</p>
+                    </fieldset>
+                  )}
+                  <div className="field"><label htmlFor="r-notes">Notes <span className="hint">optional</span></label><textarea id="r-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+                  {dnaForm && (
+                    <>
+                      <input type="hidden" name="archetype" value={dnaForm.archetype} />
+                      <input type="hidden" name="dna_profile" value={dnaForm.profileJson} />
+                      <p className="hint">Your Travel DNA and planner brief ({arch?.name}) go with this request. A person reads them when building your trip.</p>
+                    </>
+                  )}
+                  <input className="hp" tabIndex={-1} autoComplete="off" aria-hidden="true" name="bot-field" value={form.trap} onChange={(e) => setForm({ ...form, trap: e.target.value })} />
+                  {sendError && <p className="error" role="alert">{sendError}</p>}
+                  <div className="controls">
+                    <button type="submit" className="btn" disabled={sending}>{sending ? 'Sending' : restricted ? 'Join the waitlist' : 'Send trip request'}</button>
+                    <button type="button" className="btn ghost" onClick={() => setPhase('result')}>Back to card</button>
+                  </div>
+                  {!restricted && <p className="hint" style={{ marginTop: '0.75rem' }}>{pay.requestNote}</p>}
+                </form>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -350,7 +409,7 @@ export default function Roll({ moods }: { moods: Record<Mood, MoodImage> }) {
           <h2 className="panel-title" ref={stepHead} tabIndex={-1} style={{ outline: 'none' }}>{sentKind === 'trip' ? 'Request received' : 'You are on the waitlist'}</h2>
           <p className="lead">{sentKind === 'trip' ? ui.successTrip : ui.successWaitlist}</p>
           {sentKind === 'trip' && <Timeline active={1} />}
-          <div className="controls"><button type="button" className="btn ghost" onClick={editRules}>Roll another trip</button></div>
+          <div className="controls"><button type="button" className="btn ghost" onClick={editRules}>Start another request</button></div>
         </div>
       )}
     </div>

@@ -37,6 +37,8 @@ type Props = {
   refCode: string;
   passport?: Passport;
   example?: boolean;
+  // Heading level of the card title: 2 right under the page h1 (home), 3 under a section h2 (roll).
+  headingLevel?: 2 | 3;
   // Dates that matter that land inside this sealed trip, with the "Plan something for it" checkbox.
   dateNotes?: { sentences: string[]; plan: boolean; onPlan: (v: boolean) => void };
 };
@@ -51,7 +53,9 @@ const vetoLabel = (id: string) => VETOES.find((v) => v.id === id)?.label ?? id;
 
 // The sealed request card. It never contains a destination: only the rules, the dates, the package price and
 // general facts computed from the catalog (how many places are in play and a broad climate range).
-export default function ItineraryCard({ sealed: s, airport, archetypeName, mood, refCode, example = false, dateNotes }: Props) {
+export default function ItineraryCard({ sealed: s, airport, archetypeName, mood, refCode, example = false, dateNotes, headingLevel = 3 }: Props) {
+  const Title = `h${headingLevel}` as 'h2' | 'h3';
+  const Sub = `h${headingLevel + 1}` as 'h3' | 'h4';
   const code = airportCode(airport);
   const label = example ? 'Example sealed request with sample numbers' : `Your sealed trip, ${fmtRange(s.start, s.end)}`;
   const tripLine = [s.tripType, s.tripReason].filter(Boolean).join('. ');
@@ -67,7 +71,7 @@ export default function ItineraryCard({ sealed: s, airport, archetypeName, mood,
           <span className="tc-ref" title="Draft reference">{refCode}</span>
         </div>
         <div className="tc-head-bottom">
-          <h3>Your sealed trip</h3>
+          <Title>Your sealed trip</Title>
           <p>{fmtRange(s.start, s.end)}<span className="dotsep" aria-hidden="true" />{s.nights} nights<span className="dotsep" aria-hidden="true" />{s.party} {s.party === 1 ? 'traveler' : 'travelers'}</p>
         </div>
       </header>
@@ -90,35 +94,35 @@ export default function ItineraryCard({ sealed: s, airport, archetypeName, mood,
         <ul className="tc-sections">
           <li>
             <span className="ic"><Icon name="plane" /></span>
-            <div><h4>Departure</h4><p>Round trip from {code}. {CABIN_LABEL[s.cabin]}.</p></div>
+            <div><Sub>Departure</Sub><p>Round trip from {code}. {CABIN_LABEL[s.cabin]}.</p></div>
           </li>
           <li>
             <span className="ic"><Icon name="globe" /></span>
-            <div><h4>In play</h4><p>{s.count} destinations in play for these rules.</p></div>
+            <div><Sub>In play</Sub><p>{s.count} destinations in play for these rules.</p></div>
           </li>
           <li>
             <span className="ic"><Icon name="sun" /></span>
-            <div><h4>Climate range</h4><p>{s.climate}</p></div>
+            <div><Sub>Climate range</Sub><p>{s.climate}</p></div>
           </li>
           <li>
             <span className="ic"><Icon name="shield" /></span>
-            <div><h4>Rules we honor</h4>
+            <div><Sub>Rules we honor</Sub>
               <ul className="hints">{rules.map((r) => <li key={r}>{r}</li>)}</ul></div>
           </li>
           <li>
             <span className="ic"><Icon name="bag" /></span>
-            <div><h4>Packing</h4><p>Your packing list arrives at confirmation.</p></div>
+            <div><Sub>Packing</Sub><p>Your packing list arrives at confirmation.</p></div>
           </li>
           {archetypeName && (
             <li>
               <span className="ic"><Icon name="compass" /></span>
-              <div><h4>Travel DNA</h4><p>{archetypeName}.</p></div>
+              <div><Sub>Travel DNA</Sub><p>{archetypeName}.</p></div>
             </li>
           )}
           {tripLine && (
             <li className="wide">
               <span className="ic"><Icon name="route" /></span>
-              <div><h4>This trip</h4><p>{tripLine}</p></div>
+              <div><Sub>This trip</Sub><p>{tripLine}</p></div>
             </li>
           )}
         </ul>
@@ -143,7 +147,7 @@ export default function ItineraryCard({ sealed: s, airport, archetypeName, mood,
           <p className="est"><Icon name="tag" size={15} />Your budget is the package price. A person builds and books the real trip.</p>
         </div>
         <div className="tc-next">
-          <h4>What happens next</h4>
+          <Sub>What happens next</Sub>
           <Timeline compact />
         </div>
       </div>

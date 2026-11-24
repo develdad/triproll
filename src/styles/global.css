@@ -170,7 +170,7 @@ a:hover { color: var(--accent-hover); }
 .chip-status.open { color: #00625b; }
 .tc-ref { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; color: #fff; background: rgba(3, 31, 29, 0.55); padding: 0.28rem 0.6rem; border-radius: 6px; backdrop-filter: blur(4px); }
 .tc-head-bottom { position: absolute; left: 1.15rem; right: 1.15rem; bottom: 0.95rem; color: #fff; }
-.tc-head-bottom h3 { font-family: var(--font-display); font-weight: 400; font-size: clamp(1.8rem, 5vw, 2.4rem); line-height: 1; color: #fff; letter-spacing: -0.01em; }
+.tc-head-bottom :is(h2, h3) { font-family: var(--font-display); font-weight: 400; font-size: clamp(1.8rem, 5vw, 2.4rem); line-height: 1; color: #fff; letter-spacing: -0.01em; }
 .tc-head-bottom p { margin: 0.4rem 0 0; font-size: 0.88rem; color: #eaf2f1; max-width: none; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0; }
 .dotsep { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--amber); margin-inline: 0.6rem; }
 @media (max-width: 30rem) { .tc-head-bottom p { font-size: 0.8rem; } .dotsep { margin-inline: 0.4rem; } }
@@ -197,7 +197,7 @@ a:hover { color: var(--accent-hover); }
 .tc-sections > li { display: grid; grid-template-columns: 2.4rem 1fr; gap: 0.7rem; align-items: start; min-width: 0; }
 .tc-sections > li.wide { grid-column: 1 / -1; }
 .tc-sections .ic { width: 2.4rem; height: 2.4rem; border-radius: 12px; background: var(--tint); color: #00665f; display: grid; place-items: center; }
-.tc-sections h4 { font-size: 0.8rem; font-weight: 700; color: var(--ink); letter-spacing: 0.01em; margin: 0.1rem 0 0.15rem; }
+.tc-sections :is(h3, h4) { line-height: 1.3; font-size: 0.8rem; font-weight: 700; color: var(--ink); letter-spacing: 0.01em; margin: 0.1rem 0 0.15rem; }
 .tc-sections p { margin: 0; font-size: 0.88rem; line-height: 1.4; color: var(--body); max-width: none; }
 .tc-sections p.soft { color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
 .hints { list-style: none; display: grid; gap: 0.2rem 1rem; font-size: 0.86rem; color: var(--body); }
@@ -217,7 +217,7 @@ a:hover { color: var(--accent-hover); }
 .tc-price .tot strong { font-family: var(--font-mono); font-size: 1.05rem; color: #fff; }
 .tc-price .est { grid-column: 1 / -1; margin: 0.35rem 0 0; font-size: 0.8rem; color: #d8eeee; display: flex; gap: 0.45rem; align-items: flex-start; max-width: none; line-height: 1.4; }
 .tc-price .est svg { margin-top: 0.15rem; color: var(--amber); }
-.tc-next h4 { font-size: 0.8rem; font-weight: 700; margin-bottom: 0.65rem; color: var(--ink); }
+.tc-next :is(h3, h4) { line-height: 1.3; font-size: 0.8rem; font-weight: 700; margin-bottom: 0.65rem; color: var(--ink); }
 .trip-card.example { max-width: 27rem; }
 .trip-card.example .tc-next { display: none; }
 .trip-card.example .tc-sections > li:nth-child(5) { display: none; }
@@ -429,7 +429,7 @@ input[type='range'] { width: 100%; min-height: 44px; accent-color: var(--accent)
 .step-cards .step-img picture, .step-cards .step-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .step-cards .step-no { position: absolute; left: 0.8rem; top: 0.8rem; width: 2.1rem; height: 2.1rem; border-radius: 50%; background: #fff; color: var(--accent); display: grid; place-items: center; font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem; box-shadow: var(--shadow-sm); }
 .step-cards .step-body { padding: 1.1rem 1.15rem 1.3rem; }
-.step-cards h3 { font-family: var(--font-display); font-weight: 400; font-size: 1.55rem; line-height: 1.05; margin-bottom: 0.4rem; }
+.step-cards h2 { font-family: var(--font-display); font-weight: 400; font-size: 1.55rem; line-height: 1.05; letter-spacing: -0.01em; margin-bottom: 0.4rem; }
 .step-cards p { margin: 0; font-size: 0.95rem; }
 .head-photo { position: relative; border-radius: 24px; overflow: hidden; aspect-ratio: 21 / 9; box-shadow: var(--shadow-lg); margin-top: 1.5rem; background: var(--deep); }
 .head-photo picture, .head-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }

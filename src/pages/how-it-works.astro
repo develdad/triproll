@@ -28,7 +28,7 @@ const lcpSrcset = lcp.map((i, k) => `${i.src} ${stepWidths[k]}w`).join(', ');
               <Photo name={stepPhotos[i]} sizes={stepSizes} widths={stepWidths} quality={stepQuality} eager={i === 0} decorative />
               <span class="step-no" aria-hidden="true">{i + 1}</span>
             </div>
-            <div class="step-body"><h3>{s.title}</h3><p>{s.body}</p></div>
+            <div class="step-body"><h2>{s.title}</h2><p>{s.body}</p></div>
           </li>
         ))}
       </ol>
